@@ -1,8 +1,7 @@
 # Visualizing the shifts that I've worked at Staples
 
-![Image of graph from 2025](./Staples Finances 2023-24.png)
-
-![Image of graph from 2025](./Staples Finances 2025.png)
+![Graph 2023-24](./Staples%20Finances%202023-24.png)
+![Graph 2025](./Staples%20Finances%202025.png)
 
 This comes from my Google Sheets.
 
