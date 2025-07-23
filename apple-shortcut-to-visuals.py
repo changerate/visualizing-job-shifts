@@ -13,7 +13,8 @@ import argparse
 parser = argparse.ArgumentParser(description="Visualize Staples shifts.")
 parser.add_argument('--csv', type=str, default='/Users/carlos_1/Documents/GitHub/visualizing-job-shifts/Staples Finances 2025.csv', help='CSV file name')
 parser.add_argument('--year', type=str, default='2025', help='Year of data (2024 or 2025)')
-parser.add_argument('--punchTimes', help='Punch times (Date Time or Time) seperated by new line character.')
+parser.add_argument('--punchTimes', type=str, help='Punch times (Date Time or Time) seperated by new line character.')
+parser.add_argument('--pullSheetsFirst', type=str, default=False, help='First pull from Google Sheets.')
 args = parser.parse_args()
 
 
@@ -21,6 +22,7 @@ args = parser.parse_args()
 CSV_NAME = args.csv
 CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
+PULL_SHEETS_FIRST = args.pullSheetsFirst
 
 
 
@@ -362,6 +364,11 @@ if __name__ == '__main__':
         # Invalid number of punches
         exit()
     
+    if PULL_SHEETS_FIRST: 
+        pass
+        # This needs to be updated!
+    else: 
+        # Pull from the existing 
     df = setupFile()
     df = clearNaNCols(df)
 
