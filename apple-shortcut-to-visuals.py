@@ -180,6 +180,15 @@ def appendNewTimes(df, punchTimes):
 def cleanData(df, winterBreak=False):
     """
     Cleaning a dataframe for proper use.
+
+    Cleaning steps: 
+    1. convert to proper time objects 
+    2. Add correct year to data like "Fri Jul 25"
+        NOTE: Perhaps instead of relying on stupid hardcoding, just calculate 
+        whether each date could possibly exist. For example, Fri Jul 25 
+        is impossible in 2024!
+    3. convert to proper date objects 
+    4. remove any periods that are not interesting 
     """
 
     ## Convert to correct time format
@@ -224,6 +233,7 @@ def cleanData(df, winterBreak=False):
             ).dt.date
 
 
+    # Remove any periods that are not interesting 
     if not winterBreak: 
         ## Remove shifts during winter break (2025)
         if CURRENT_YEAR == '2025':
