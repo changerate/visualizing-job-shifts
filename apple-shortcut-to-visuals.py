@@ -5,13 +5,13 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
 from datetime import datetime, date, time
-from pathlib import Path
 import argparse
 import numpy as np
 import os
 import copy 
 
 import gspread
+from pathlib import Path
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
@@ -21,16 +21,21 @@ from dotenv import load_dotenv
 parser = argparse.ArgumentParser(description="Visualize Staples shifts.")
 parser.add_argument('--csv', type=str, default='/Users/carlos_1/Documents/GitHub/visualizing-job-shifts/Staples Finances 2025.csv', help='CSV file name')
 parser.add_argument('--year', type=str, default='2025', help='Year of data (2024 or 2025)')
-parser.add_argument('--punchTimes', type=str, help='Punch times (Date Time or Time) seperated by new line character.')
+parser.add_argument('--punchTimes', type=str, default='', help='Punch times (Date Time or Time) seperated by new line character.')
 parser.add_argument('--pullSheetsFirst', type=str, default=False, help='First pull from Google Sheets.')
 args = parser.parse_args()
 
 
 
-CSV_NAME = args.csv
 CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
 PULL_SHEETS_FIRST = args.pullSheetsFirst
+SCRIPTS_DIR = Path(__file__).parent
+
+
+
+
+
 
 
 
@@ -43,10 +48,11 @@ def loadFromGoogleSheets(sheetName="Staples Finances 2025"):
     """
 
     try: 
-        load_dotenv()  # automatically looks for .env in the current directory
+        env_path = SCRIPTS_DIR / ".env"
+        load_dotenv(dotenv_path=env_path)  # automatically looks for .env in the scripts directory
 
-        creds_path = os.getenv("GOOGLE_SHEETS_CREDS_FILE")
-
+        creds_path = SCRIPTS_DIR / os.getenv("GOOGLE_SHEETS_CREDS_FILE")
+        
         # Define the scopes
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -174,8 +180,8 @@ def parsePunches():
         
         # Check if there's the correct punch times
         if len(punchTimes) != 2 and len(punchTimes) != 4: 
-            print(f"Invalid numnber of punches for a shift! Punches: {len(punchTimes)}")
-            return False
+            print(f"Invalid number of punches for a shift! Punches: {len(punchTimes)}")
+            return []
         
 
     except Exception as e: 
@@ -192,6 +198,8 @@ def parsePunches():
 
 
 def appendNewTimes(df, punchTimes):
+    if len(punchTimes) == 0: 
+        return df
 
     inTime = punchTimes[0][0].time()
     newDate = punchTimes[0][0].date()
@@ -217,7 +225,7 @@ def appendNewTimes(df, punchTimes):
         
     else: 
         print(f"Error. Invalid number of punches in a day.")
-        return pd.DataFrame([])
+        return df
 
     newRow = pd.DataFrame([newRow])
     return pd.concat([newRow, df], ignore_index=True)
@@ -247,25 +255,6 @@ def cleanData(df, winterBreak=False):
     5. remove skip lunch column
     """
             
-
-    print()
-    print()
-    # print(df)
-    print()
-    print()
-    
-    ## Convert to correct time format
-    # df['IN'] = pd.to_datetime(df['IN'], errors='coerce').dt.time
-    # df['OUT'] = pd.to_datetime(df['OUT'], errors='coerce').dt.time
-    # df['time'] = pd.to_datetime(df['time'], errors='coerce').dt.time
-
-
-    # df['IN'] = df['IN'].apply(lambda x: datetime.strptime(x, "%H:%M:%S").time() if pd.notna(x) and x else pd.NaT)
-    # df['OUT'] = df['OUT'].apply(lambda x: datetime.strptime(x, "%H:%M:%S").time() if pd.notna(x) and x else pd.NaT)
-    # df['time'] = df['time'].apply(lambda x: datetime.strptime(x, "%H:%M").time() if pd.notna(x) and x else pd.NaT)
-    # df['DATE'] = df['DATE'].apply(lambda x: datetime.strptime(x, "%Y-%m-%d").date() if pd.notna(x) and x else pd.NaT)
-
-
     ## Remove any periods that are not interesting 
     if not winterBreak: 
         ## Remove shifts during winter break (2025)
@@ -323,7 +312,7 @@ def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'):
 
     # Save the DataFrame
     dfCopy.to_csv(filepath, index=False)
-    print(f'Saved to: {filepath}')
+    print(f'\n\nSaved to: {filepath}')
 
 
 
@@ -420,7 +409,7 @@ def parse_time_flexible(x):
         return pd.NaT
     
     if isinstance(x, time):
-        print(f"x is already correct format")
+        # print(f"x is already correct format")
         return x
 
     for fmt in ("%H:%M:%S", "%I:%M %p", "%H:%M"):  # supports 24hr, 12hr, with/without seconds
@@ -437,7 +426,7 @@ def parse_date_flexible(x):
         return pd.NaT
     
     if isinstance(x, date):
-        print(f"x is already correct format")
+        # print(f"x is already correct format")
         return x
 
     for fmt in ("%Y-%m-%d", "%a %b %d"):  # supports YYYY-MM-DD, Fri Jul 25
@@ -458,7 +447,6 @@ def standardize(df):
     df['OUT'] = df['OUT'].apply(parse_time_flexible)
     df['time'] = df['time'].apply(parse_time_flexible)
     df['DATE'] = df['DATE'].apply(parse_date_flexible)
-    # printTypes(df)
 
     return df
 
@@ -605,7 +593,6 @@ def labelYears(df):
 
     elif CURRENT_YEAR == '2025':
         # Find the first row of 2024
-        print(df)
         for idx, cell in df['YEAR SELECTOR'].items():
 
             if cell == '2024 ⬇️':
@@ -630,8 +617,6 @@ def labelYears(df):
             errors='coerce'
             ).dt.date
 
-        # df['DATE'] = df['DATE'].dt.to_pydatetime()          # convert to Python datetime from pandas Timestamp
-
 
     return df
 
@@ -643,6 +628,10 @@ def labelYears(df):
 
 
 def printTypes(df):
+    """
+    Simply prints the datatypes of the most important columns. IN, OUT, DATE, time
+    """
+
     print()
     print(f"=========================================")
     print(f"Testing the types: ")
@@ -653,6 +642,13 @@ def printTypes(df):
             print(f"The {cell}\tcell is of type:\t{type(cell)}")
     print(f"=========================================")
     print()
+
+
+
+
+
+
+
 
 
 
@@ -673,16 +669,19 @@ if __name__ == '__main__':
     
     
     punchTimes = parsePunches()
-    if not punchTimes: 
-        exit() # Invalid number of punches
     
     
     if PULL_SHEETS_FIRST: 
         # Pull directly from Google Sheets
         df = loadFromGoogleSheets()
-        pd.to_cs
+
+        df.to_csv(SCRIPTS_DIR / "my_data.csv", index=False, float_format="%.2f")
+
+        if df.empty:
+            exit()
         df = labelYears(df)
         df = standardize(df)
+
 
     else: 
         # Pull from the existing sheet closet 
@@ -698,8 +697,12 @@ if __name__ == '__main__':
     if df.empty: 
         exit()
     
-    df = cleanData(df)
 
+    df = cleanData(df)
+    
+    if df.empty: 
+        exit()
+    
     df = appendNewTimes(df, punchTimes)
     saveToCloset(df)
     plot(df)

@@ -1,6 +1,7 @@
 .vscode
 .DS_Store
 /api-keys/*
+!/api-keys/.gitkeep
 
 /sheet-closet/original-sheets/*
 /sheet-closet/working-sheets/*
