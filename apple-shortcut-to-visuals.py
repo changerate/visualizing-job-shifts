@@ -6,8 +6,9 @@ import matplotlib.dates as mdates
 from matplotlib.patches import Patch
 from datetime import date
 from datetime import datetime
+from pathlib import Path
 import argparse
-
+import os
 
 
 parser = argparse.ArgumentParser(description="Visualize Staples shifts.")
@@ -30,30 +31,6 @@ PULL_SHEETS_FIRST = args.pullSheetsFirst
 
 
 
-def setupFile():
-    """
-    Set up the file 
-    """
-    
-    try: 
-        
-        # year checking
-        if 2022 >= int(CURRENT_YEAR) or int(CURRENT_YEAR) > 2025: # This needs to be updated to the 'current' year 
-            print(f"Error. Incorrect parameters entered: {CURRENT_YEAR}")
-            return pd.DataFrame()
-            
-        return pd.read_csv(CSV_NAME)
-
-    except Exception as e: 
-        print(f"Error. Incorrect parameters entered: \n{e}")
-        return pd.DataFrame()
-
-
-
-
-
-
-
 def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):     
     """
     Remove columns that are over 'threshold' NaN
@@ -61,14 +38,17 @@ def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):
     Its purpose is to divide between upper and lower years. 
     The default name of the column is YEAR SELECTOR.
     """
+    try: 
+        for col in df.columns: 
+            numNaN = df[col].isna().sum()
+            percentEmpty = numNaN / len(df)
 
-    numRows = len(df)
-    for col in df.columns: 
-        numNaN = df[col].isna().sum()
-        percentEmpty = numNaN / numRows
-
-        if percentEmpty > threshold and col != yearDivider: 
-            df.drop(col, axis=1, inplace=True)
+            if percentEmpty > threshold and col != yearDivider: 
+                df.drop(col, axis=1, inplace=True)
+    except Exception as e: 
+        print(f"Something went wrong when cleaning the NaN rows: {e}")
+    
+    return df
 
 
 
@@ -100,18 +80,15 @@ def parsePunches():
                 punchTimesSet.add(datetime.strptime(punchTime, "%b %d, %Y at %I:%M %p"))
 
         
-        # Check if there's the correct punch times
-        if len(punchTimes) != 2 and len(punchTimes) != 4: 
-            print(f"Invalid numnber of punches for a shift! Punches: {len(punchTimes)}")
-            return False
-        
-        
         # Count the number of punches in the day 
         punchTimes = sorted(punchTimesSet)
         lastDay = 100
         punchNums = []
         punchNum = 0
         for punchTime in punchTimes:
+            
+            if not punchTime: 
+                continue
             
             if punchTime.day == lastDay:
                 # either update the number of punches on the date...
@@ -124,6 +101,12 @@ def parsePunches():
                 punchNums.append(punchNum)
 
         punchTimes = sorted(zip(punchTimes, punchNums))
+        
+        
+        # Check if there's the correct punch times
+        if len(punchTimes) != 2 and len(punchTimes) != 4: 
+            print(f"Invalid numnber of punches for a shift! Punches: {len(punchTimes)}")
+            return False
         
 
     except Exception as e: 
@@ -141,19 +124,19 @@ def parsePunches():
 
 def appendNewTimes(df, punchTimes):
 
-    inTime = punchTimes[0][0].strftime("%I:%M %p")
+    inTime = punchTimes[0][0].strftime("%H:%M %p")
     date = punchTimes[0][0].strftime("%a %b %d")
     # print(f"date: {date}")
 
     if len(punchTimes) == 2: 
-        outTime = punchTimes[1][0].strftime("%I:%M %p")
+        outTime = punchTimes[1][0].strftime("%H:%M")
         hours = to24hr(outTime)-to24hr(inTime)
         newRow = {"DATE": date, "IN": inTime, "OUT": outTime, "hours": hours}
 
     elif len(punchTimes) == 4:
-        outTime = punchTimes[3][0].strftime("%I:%M %p")
-        lunchIn = punchTimes[1][0].strftime("%I:%M %p")
-        lunchOut = punchTimes[2][0].strftime("%I:%M %p")
+        outTime = punchTimes[3][0].strftime("%H:%M")
+        lunchIn = punchTimes[1][0].strftime("%H:%M")
+        lunchOut = punchTimes[2][0].strftime("%H:%M")
         hours = to24hr(outTime)-to24hr(inTime)-(to24hr(lunchIn)-to24hr(lunchIn))
         newRow = {
             "DATE": date,
@@ -166,6 +149,8 @@ def appendNewTimes(df, punchTimes):
         
     else: 
         print(f"Error. Invalid number of punches in a day.")
+
+    print(newRow)
 
     return pd.concat([pd.DataFrame([newRow]), df], ignore_index=True)
 
@@ -191,13 +176,14 @@ def cleanData(df, winterBreak=False):
         is impossible in 2024!
     3. convert to proper date objects 
     4. remove any periods that are not interesting 
+    5. remove skip lunch column
     """
 
+    
     ## Convert to correct time format
-    df['IN'] = pd.to_datetime(df['IN'], format='%I:%M %p').dt.time
-    df['OUT'] = pd.to_datetime(df['OUT'], format='%I:%M %p').dt.time
-    df['time'] = pd.to_datetime(df['time'], format='%H:%M').dt.time
-
+    df['IN'] = pd.to_datetime(df['IN'], errors='coerce').dt.time
+    df['OUT'] = pd.to_datetime(df['OUT'], errors='coerce').dt.time
+        
 
     ## Label 2023 and 2024 data
     lastRowOf2024 = len(df)
@@ -219,30 +205,59 @@ def cleanData(df, winterBreak=False):
         
     ## Convert to correct date format
     if CURRENT_YEAR == '2024':
-        df['DATE'].iloc[0:lastRowOf2024] = pd.to_datetime(df['DATE'].iloc[0:lastRowOf2024] + ' ' + CURRENT_YEAR, format='%a %b %d %Y', errors='coerce').dt.date
-        df['DATE'].iloc[lastRowOf2024:len(df)] = pd.to_datetime(df['DATE'].iloc[lastRowOf2024:len(df)] + ' 2023', format='%a %b %d %Y', errors='coerce').dt.date
+        df['DATE'].iloc[0:lastRowOf2024] = pd.to_datetime(df['DATE'].iloc[0:lastRowOf2024] + ' ' + CURRENT_YEAR, errors='coerce').dt.date
+        df['DATE'].iloc[lastRowOf2024:len(df)] = pd.to_datetime(df['DATE'].iloc[lastRowOf2024:len(df)] + ' 2023', errors='coerce').dt.date
 
     elif CURRENT_YEAR == '2025': 
         df.loc[0:firstRowOf2024, 'DATE'] = pd.to_datetime(
             df.loc[0:firstRowOf2024, 'DATE'].astype(str) + f' {CURRENT_YEAR}',
-            format='%a %b %d %Y',
+            # format='%a %b %d %Y',
             errors='coerce'
         ).dt.date
         df.loc[firstRowOf2024:len(df), 'DATE'] = pd.to_datetime(
             df.loc[firstRowOf2024:len(df), 'DATE'].astype(str) + f' 2024',
-            format='%a %b %d %Y', 
+            # format='%a %b %d %Y', 
             errors='coerce'
             ).dt.date
 
 
-    # Remove any periods that are not interesting 
+    ## Remove any periods that are not interesting 
     if not winterBreak: 
         ## Remove shifts during winter break (2025)
         if CURRENT_YEAR == '2025':
             df = df[df['DATE'] >= date(2025, 5, 1)]
 
 
+    ## Remove skip lunch column lol
+    try: 
+        df.drop('skip lunch', axis=1, inplace=True)
+    except: 
+        print(f"Column 'skip lunch' not found")
+
     return df
+
+
+
+
+
+
+
+
+def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'): 
+    # Ensure target directory exists
+    Path(workingSheetsCloset).mkdir(parents=True, exist_ok=True)
+
+    # Create a timestamped filename
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f'my-sheet-{timestamp}.csv'
+    filepath = Path(workingSheetsCloset) / filename
+
+    # Save the DataFrame
+    df.to_csv(filepath, index=False)
+    print(f'Saved to: {filepath}')    
+    
+
+
 
 
 
@@ -326,12 +341,55 @@ def plot(df):
 
 
 
-def timeDiff(dateTimeStart, dateTimeEnd): 
-    startTime = dateTimeStart.hour + dateTimeStart.minute / 60
-    endTime = dateTimeEnd.hour + dateTimeEnd.minute / 60
 
-    # print(f"Difference: {endTime - startTime}")
-    return endTime - startTime
+def pullLastUpdatedWorkingSheet(workingSheetsCloset='sheet-closet/working-sheets/', originalSheetsCloset='sheet-closet/original-sheets/'):
+
+    # Get the name of the last updated csv file in the working sheet closet 
+    files = [os.path.join(workingSheetsCloset, f) for f in os.listdir(workingSheetsCloset)]
+    files = [f for f in files if os.path.isfile(f)]
+
+    if not files: 
+        print(f"Notice: No working sheets stored. Pulling from the original's closet.")
+        # pull from original sheets instead and update working sheets
+        # Get the name of the last updated csv file in the ORIGINALS sheet closet 
+        origFiles = [os.path.join(originalSheetsCloset, f) for f in os.listdir(originalSheetsCloset)]
+        origFiles = [f for f in origFiles if os.path.isfile(f)]
+        
+        if not origFiles: 
+            print(f"Error: No original sheets stored.")
+            return pd.DataFrame([])
+
+        csvName = max(origFiles, key=os.path.getmtime)
+        # print(f"Updating the working sheets with {csvName}.")
+
+        df = pd.DataFrame(pd.read_csv(csvName))
+        # df.to_csv(csvName, index=False)
+        return df
+
+    else: 
+        csvName = max(files, key=os.path.getmtime)
+        return pd.DataFrame(pd.read_csv(csvName))
+    
+
+
+
+
+
+def checkYear():
+    try: 
+        
+        # year checking
+        if 2022 >= int(CURRENT_YEAR) or int(CURRENT_YEAR) > 2025: # This needs to be updated to the 'current' year 
+            print(f"Error. Incorrect parameters entered: {CURRENT_YEAR}")
+            return False
+            
+    except Exception as e: 
+        print(f"Error. Incorrect parameters entered: \n{e}")
+        return False
+
+    return True
+
+
 
 
 
@@ -339,9 +397,14 @@ def to24hr(strTime: str):
     """
     Takes a time like 4:30 PM and returns a time like 16.5
     """
-    
-    timeObj = datetime.strptime(strTime, "%I:%M %p")
-    return timeObj.hour + timeObj.minute / 60
+    for fmt in ("%I:%M %p", "%H:%M", "%H:%M:%S"):
+        try:
+            timeObj = datetime.strptime(strTime.strip(), fmt).time()
+            return timeObj.hour + timeObj.minute / 60
+        except (ValueError, TypeError):
+            continue
+
+    raise ValueError(f"Unrecognized format: {strTime}")
 
 
 
@@ -359,20 +422,26 @@ def to24hr(strTime: str):
 
 if __name__ == '__main__':
     
+    if not checkYear():
+        exit()
+    
     punchTimes = parsePunches()
     if not punchTimes: 
-        # Invalid number of punches
-        exit()
+        exit() # Invalid number of punches
     
     if PULL_SHEETS_FIRST: 
         pass
         # This needs to be updated!
     else: 
-        # Pull from the existing 
-    df = setupFile()
+        # Pull from the existing sheet closet 
+        df = pullLastUpdatedWorkingSheet()
+    
     df = clearNaNCols(df)
 
     if not df.empty: 
-        df = appendNewTimes(df, punchTimes)    
+        df = appendNewTimes(df, punchTimes)
         df = cleanData(df)
-        plot(df)
+
+        print(df)
+        # saveToCloset(df)
+        # plot(df)

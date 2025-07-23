@@ -2,8 +2,10 @@
 .DS_Store
 /api-keys/*
 
-/sheet-closet/*
-!/sheet-closet/.gitkeep
+/sheet-closet/original-sheets/*
+/sheet-closet/working-sheets/*
+!/sheet-closet/original-sheets/.gitkeep
+!/sheet-closet/working-sheets/.gitkeep
 
 
 # Byte-compiled / optimized / DLL files
