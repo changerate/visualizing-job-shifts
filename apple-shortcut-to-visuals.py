@@ -4,11 +4,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
-from datetime import date
-from datetime import datetime
+from datetime import datetime, date, time
 from pathlib import Path
 import argparse
+import numpy as np
 import os
+import copy 
+
+import gspread
+from google.oauth2.service_account import Credentials
+from dotenv import load_dotenv
+
+
 
 
 parser = argparse.ArgumentParser(description="Visualize Staples shifts.")
@@ -30,25 +37,87 @@ PULL_SHEETS_FIRST = args.pullSheetsFirst
 
 
 
+def loadFromGoogleSheets(sheetName="Staples Finances 2025"): 
+    """
+    URGENT: UPDATE THIS TO SAVE INTO THE ORIGINALS DIR.
+    """
+
+    try: 
+        load_dotenv()  # automatically looks for .env in the current directory
+
+        creds_path = os.getenv("GOOGLE_SHEETS_CREDS_FILE")
+
+        # Define the scopes
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        client = gspread.authorize(creds)
+
+        # Authorize
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        client = gspread.authorize(creds)
+
+        # Open sheet by name or URL
+        sheet = client.open(sheetName).sheet1
+        data = sheet.get_all_values()
+
+        # Create DataFrame using first row as header
+        df = pd.DataFrame(data[1:], columns=data[0])
+
+        return df
+
+
+    except Exception as e: 
+        print(f"{e}")
+        return pd.DataFrame([])
+
+
+
+
+
+
+
+
+
 
 def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):     
     """
-    Remove columns that are over 'threshold' NaN
+    Remove columns that are over 'threshold' percent NaN
     yearDivider the name of a column containing mostly barren cells. 
     Its purpose is to divide between upper and lower years. 
     The default name of the column is YEAR SELECTOR.
     """
     try: 
-        for col in df.columns: 
+    
+        # first deal with the '' left in the cells by Google
+        try: 
+            df.drop('', axis=1, inplace=True)
+        except:
+            pass
+        try: 
+            df.replace('', np.nan, inplace=True)
+        except:
+            pass
+
+        colsToCheck = list(df.columns)
+        
+        for col in colsToCheck: 
             numNaN = df[col].isna().sum()
             percentEmpty = numNaN / len(df)
 
             if percentEmpty > threshold and col != yearDivider: 
                 df.drop(col, axis=1, inplace=True)
+
+
     except Exception as e: 
         print(f"Something went wrong when cleaning the NaN rows: {e}")
     
     return df
+
+
 
 
 
@@ -124,22 +193,21 @@ def parsePunches():
 
 def appendNewTimes(df, punchTimes):
 
-    inTime = punchTimes[0][0].strftime("%H:%M %p")
-    date = punchTimes[0][0].strftime("%a %b %d")
-    # print(f"date: {date}")
+    inTime = punchTimes[0][0].time()
+    newDate = punchTimes[0][0].date()
 
     if len(punchTimes) == 2: 
-        outTime = punchTimes[1][0].strftime("%H:%M")
-        hours = to24hr(outTime)-to24hr(inTime)
-        newRow = {"DATE": date, "IN": inTime, "OUT": outTime, "hours": hours}
+        outTime = punchTimes[1][0].time()
+        hours = to24HrFloat(outTime)-to24HrFloat(inTime)
+        newRow = {"DATE": newDate, "IN": inTime, "OUT": outTime, "hours": hours}
 
     elif len(punchTimes) == 4:
-        outTime = punchTimes[3][0].strftime("%H:%M")
-        lunchIn = punchTimes[1][0].strftime("%H:%M")
-        lunchOut = punchTimes[2][0].strftime("%H:%M")
-        hours = to24hr(outTime)-to24hr(inTime)-(to24hr(lunchIn)-to24hr(lunchIn))
+        outTime = punchTimes[3][0].time()
+        lunchIn = punchTimes[1][0].time()
+        lunchOut = punchTimes[2][0].time()
+        hours = to24HrFloat(outTime)-to24HrFloat(inTime)-(to24HrFloat(lunchOut)-to24HrFloat(lunchIn))
         newRow = {
-            "DATE": date,
+            "DATE": newDate,
             "IN": inTime,
             "LUNCH IN": lunchIn,
             "LUNCH OUT": lunchOut,
@@ -149,10 +217,10 @@ def appendNewTimes(df, punchTimes):
         
     else: 
         print(f"Error. Invalid number of punches in a day.")
+        return pd.DataFrame([])
 
-    print(newRow)
-
-    return pd.concat([pd.DataFrame([newRow]), df], ignore_index=True)
+    newRow = pd.DataFrame([newRow])
+    return pd.concat([newRow, df], ignore_index=True)
 
 
     
@@ -178,55 +246,33 @@ def cleanData(df, winterBreak=False):
     4. remove any periods that are not interesting 
     5. remove skip lunch column
     """
+            
 
+    print()
+    print()
+    # print(df)
+    print()
+    print()
     
     ## Convert to correct time format
-    df['IN'] = pd.to_datetime(df['IN'], errors='coerce').dt.time
-    df['OUT'] = pd.to_datetime(df['OUT'], errors='coerce').dt.time
-        
+    # df['IN'] = pd.to_datetime(df['IN'], errors='coerce').dt.time
+    # df['OUT'] = pd.to_datetime(df['OUT'], errors='coerce').dt.time
+    # df['time'] = pd.to_datetime(df['time'], errors='coerce').dt.time
 
-    ## Label 2023 and 2024 data
-    lastRowOf2024 = len(df)
-    firstRowOf2024 = len(df)
-    if CURRENT_YEAR == '2024':
-        # Find the last row of 2024
-        for idx, cell in df['YEAR SELECTOR'].items():
 
-            if cell == '2024  ⬆️':
-                lastRowOf2024 = idx
-
-    elif CURRENT_YEAR == '2025':
-        # Find the first row of 2024
-        for idx, cell in df['YEAR SELECTOR'].items():
-
-            if cell == '2024 ⬇️':
-                firstRowOf2024 = idx
-        
-        
-    ## Convert to correct date format
-    if CURRENT_YEAR == '2024':
-        df['DATE'].iloc[0:lastRowOf2024] = pd.to_datetime(df['DATE'].iloc[0:lastRowOf2024] + ' ' + CURRENT_YEAR, errors='coerce').dt.date
-        df['DATE'].iloc[lastRowOf2024:len(df)] = pd.to_datetime(df['DATE'].iloc[lastRowOf2024:len(df)] + ' 2023', errors='coerce').dt.date
-
-    elif CURRENT_YEAR == '2025': 
-        df.loc[0:firstRowOf2024, 'DATE'] = pd.to_datetime(
-            df.loc[0:firstRowOf2024, 'DATE'].astype(str) + f' {CURRENT_YEAR}',
-            # format='%a %b %d %Y',
-            errors='coerce'
-        ).dt.date
-        df.loc[firstRowOf2024:len(df), 'DATE'] = pd.to_datetime(
-            df.loc[firstRowOf2024:len(df), 'DATE'].astype(str) + f' 2024',
-            # format='%a %b %d %Y', 
-            errors='coerce'
-            ).dt.date
+    # df['IN'] = df['IN'].apply(lambda x: datetime.strptime(x, "%H:%M:%S").time() if pd.notna(x) and x else pd.NaT)
+    # df['OUT'] = df['OUT'].apply(lambda x: datetime.strptime(x, "%H:%M:%S").time() if pd.notna(x) and x else pd.NaT)
+    # df['time'] = df['time'].apply(lambda x: datetime.strptime(x, "%H:%M").time() if pd.notna(x) and x else pd.NaT)
+    # df['DATE'] = df['DATE'].apply(lambda x: datetime.strptime(x, "%Y-%m-%d").date() if pd.notna(x) and x else pd.NaT)
 
 
     ## Remove any periods that are not interesting 
     if not winterBreak: 
         ## Remove shifts during winter break (2025)
         if CURRENT_YEAR == '2025':
+            # print(f"Date type is: {type(df['DATE'])}")
+            # print(f"Date is: {df['DATE']}")
             df = df[df['DATE'] >= date(2025, 5, 1)]
-
 
     ## Remove skip lunch column lol
     try: 
@@ -241,22 +287,43 @@ def cleanData(df, winterBreak=False):
 
 
 
+def toStringCSV(df): 
+    """
+    Format time/date columns as strings
+    """
+    # printTypes(df)        
+
+    for col in df.columns:
+        if pd.api.types.is_object_dtype(df[col]):
+            sample = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+            if isinstance(sample, time):
+                df[col] = df[col].apply(lambda t: t.strftime("%H:%M") if pd.notna(t) else '')
+            elif isinstance(sample, date):
+                df[col] = df[col].apply(lambda d: d.strftime("%Y-%m-%d") if pd.notna(d) else '')
+
+    return df
 
 
-def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'): 
+
+
+
+
+def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'):
+    dfCopy = copy.deepcopy(df)
+
     # Ensure target directory exists
     Path(workingSheetsCloset).mkdir(parents=True, exist_ok=True)
 
+    dfCopy = toStringCSV(dfCopy)
+
     # Create a timestamped filename
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
     filename = f'my-sheet-{timestamp}.csv'
     filepath = Path(workingSheetsCloset) / filename
 
     # Save the DataFrame
-    df.to_csv(filepath, index=False)
-    print(f'Saved to: {filepath}')    
-    
-
+    dfCopy.to_csv(filepath, index=False)
+    print(f'Saved to: {filepath}')
 
 
 
@@ -270,25 +337,30 @@ def plot(df):
     """
     PLOTTING
     """
+        
     fig, ax = plt.subplots(figsize=(20, 6))
 
-    # plot 
+
     for _, row in df.iterrows():
-
-        if row['DATE'] == 'NaT':
+        if pd.isna(row['DATE']) or pd.isna(row['IN']) or pd.isna(row['OUT']):
             continue
-
-        duration = (row['OUT'].hour + row['OUT'].minute / 60) - (row['IN'].hour + row['IN'].minute / 60)
+        if row['DATE'] == '' or row['IN'] == '' or row['OUT'] == '':
+            continue
+        
+        duration = to24HrFloat(row['OUT']) - to24HrFloat(row['IN'])
+            
+        # label full shifts light green
         color = 'skyblue'
         if duration >= 8:
             color='lightgreen'
         
         ax.bar(x=row['DATE'],
-                height=duration,
-                bottom=row['IN'].hour + row['IN'].minute / 60,
-                width=0.93,
-                label='shift',
-                color=color)
+            height=duration,
+            bottom=to24HrFloat(row['IN']),
+            label='shift',
+            width=0.93,
+            color=color)
+
 
     # title 
     if CURRENT_YEAR == '2025':
@@ -335,9 +407,61 @@ def plot(df):
 
 
 
+
+
 # =====================================================================
 #            UTILITY FUNCTIONS
 # =====================================================================
+
+
+
+def parse_time_flexible(x):
+    if pd.isna(x) or x == '':
+        return pd.NaT
+    
+    if isinstance(x, time):
+        print(f"x is already correct format")
+        return x
+
+    for fmt in ("%H:%M:%S", "%I:%M %p", "%H:%M"):  # supports 24hr, 12hr, with/without seconds
+        try:
+            stdFormat = datetime.strptime(x, fmt).time()
+            return stdFormat
+        except ValueError:
+            continue
+    return pd.NaT  # if none match
+
+
+def parse_date_flexible(x):
+    if pd.isna(x) or x == '':
+        return pd.NaT
+    
+    if isinstance(x, date):
+        print(f"x is already correct format")
+        return x
+
+    for fmt in ("%Y-%m-%d", "%a %b %d"):  # supports YYYY-MM-DD, Fri Jul 25
+        try:
+            stdFormat = datetime.strptime(x, fmt).date()
+            return stdFormat
+        except ValueError:
+            continue
+    return pd.NaT  # if none match
+
+
+def standardize(df): 
+    """
+    From strings to datetime objecs 
+    """
+    
+    df['IN'] = df['IN'].apply(parse_time_flexible)
+    df['OUT'] = df['OUT'].apply(parse_time_flexible)
+    df['time'] = df['time'].apply(parse_time_flexible)
+    df['DATE'] = df['DATE'].apply(parse_date_flexible)
+    # printTypes(df)
+
+    return df
+
 
 
 
@@ -363,11 +487,11 @@ def pullLastUpdatedWorkingSheet(workingSheetsCloset='sheet-closet/working-sheets
         # print(f"Updating the working sheets with {csvName}.")
 
         df = pd.DataFrame(pd.read_csv(csvName))
-        # df.to_csv(csvName, index=False)
         return df
 
     else: 
         csvName = max(files, key=os.path.getmtime)
+        print(f"Pulling working sheet: {csvName}")
         return pd.DataFrame(pd.read_csv(csvName))
     
 
@@ -393,20 +517,142 @@ def checkYear():
 
 
 
-def to24hr(strTime: str):
+
+def dateToString(dt, format_str="%Y-%m-%d"):
+    """
+    Convert various date/time objects to date string
+    
+    Args:
+        dt: string, datetime.date, datetime.time, or datetime object
+        format_str: output format (default: "YYYY-MM-DD")
+    
+    Returns:
+        String representation of the date
+    """
+    
+    if isinstance(dt, str):
+        return dt  # Already a string, return as-is
+    
+    elif isinstance(dt, datetime):
+        return dt.strftime(format_str)
+    
+    elif isinstance(dt, date):
+        return dt.strftime(format_str)
+    
+    elif isinstance(dt, time):
+        # Time objects don't have date info, use today's date
+        today = date.today()
+        return today.strftime(format_str)
+    
+    else:
+        raise TypeError(f"Unsupported type: {type(dt)}")
+
+    
+
+
+
+
+
+def to24HrFloat(theTime):
     """
     Takes a time like 4:30 PM and returns a time like 16.5
     """
-    for fmt in ("%I:%M %p", "%H:%M", "%H:%M:%S"):
-        try:
-            timeObj = datetime.strptime(strTime.strip(), fmt).time()
-            return timeObj.hour + timeObj.minute / 60
-        except (ValueError, TypeError):
-            continue
 
-    raise ValueError(f"Unrecognized format: {strTime}")
+    if pd.isna(theTime) or theTime == '':
+        return pd.NaT
+
+    
+    if isinstance(theTime, str):
+        for fmt in ("%I:%M %p", "%H:%M", "%H:%M:%S"):
+            try:
+                timeObj = datetime.strptime(theTime.strip(), fmt).time()
+                return timeObj.hour + timeObj.minute / 60
+            except (ValueError, TypeError):
+                continue
+
+        raise ValueError(f"Unrecognized format: {theTime}")
 
 
+    elif isinstance(theTime, datetime):
+        return theTime.time().hour + theTime.time().minute / 60 + theTime.time().second / 3600
+
+
+    elif isinstance(theTime, time):
+        return theTime.hour + theTime.minute / 60 + theTime.second / 3600
+
+
+    else:
+        raise TypeError("Unsupported input type")
+
+
+
+
+
+
+
+
+def labelYears(df):
+
+    ## Label 2023 and 2024 data
+    lastRowOf2024 = len(df)
+    firstRowOf2024 = len(df)
+    if CURRENT_YEAR == '2024':
+        # Find the last row of 2024
+        for idx, cell in df['YEAR SELECTOR'].items():
+
+            if cell == '2024  ⬆️':
+                lastRowOf2024 = idx
+
+    elif CURRENT_YEAR == '2025':
+        # Find the first row of 2024
+        print(df)
+        for idx, cell in df['YEAR SELECTOR'].items():
+
+            if cell == '2024 ⬇️':
+                firstRowOf2024 = idx
+        
+        
+    ## Convert to correct date format
+    if CURRENT_YEAR == '2024':
+        df['DATE'].iloc[0:lastRowOf2024] = pd.to_datetime(df['DATE'].iloc[0:lastRowOf2024] + ' ' + CURRENT_YEAR, errors='coerce').dt.date
+        df['DATE'].iloc[lastRowOf2024:len(df)] = pd.to_datetime(df['DATE'].iloc[lastRowOf2024:len(df)] + ' 2023', errors='coerce').dt.date
+
+
+    elif CURRENT_YEAR == '2025': 
+        df.loc[0:firstRowOf2024, 'DATE'] = pd.to_datetime(
+            df.loc[0:firstRowOf2024, 'DATE'].astype(str) + f' {CURRENT_YEAR}',
+            format='%a %b %d %Y',
+            errors='coerce'
+        ).dt.date
+        df.loc[firstRowOf2024:len(df), 'DATE'] = pd.to_datetime(
+            df.loc[firstRowOf2024:len(df), 'DATE'].astype(str) + f' 2024',
+            format='%a %b %d %Y', 
+            errors='coerce'
+            ).dt.date
+
+        # df['DATE'] = df['DATE'].dt.to_pydatetime()          # convert to Python datetime from pandas Timestamp
+
+
+    return df
+
+
+
+
+
+
+
+
+def printTypes(df):
+    print()
+    print(f"=========================================")
+    print(f"Testing the types: ")
+    for col in df.columns:
+        for cell in df[col]:
+            if col != 'IN' and col != 'OUT' and col != 'time' and col != 'DATE':
+                continue
+            print(f"The {cell}\tcell is of type:\t{type(cell)}")
+    print(f"=========================================")
+    print()
 
 
 
@@ -425,23 +671,35 @@ if __name__ == '__main__':
     if not checkYear():
         exit()
     
+    
     punchTimes = parsePunches()
     if not punchTimes: 
         exit() # Invalid number of punches
     
+    
     if PULL_SHEETS_FIRST: 
-        pass
-        # This needs to be updated!
+        # Pull directly from Google Sheets
+        df = loadFromGoogleSheets()
+        pd.to_cs
+        df = labelYears(df)
+        df = standardize(df)
+
     else: 
         # Pull from the existing sheet closet 
         df = pullLastUpdatedWorkingSheet()
+        if df.empty:
+            exit()
+        df = standardize(df)
+    
     
     df = clearNaNCols(df)
+    
 
-    if not df.empty: 
-        df = appendNewTimes(df, punchTimes)
-        df = cleanData(df)
+    if df.empty: 
+        exit()
+    
+    df = cleanData(df)
 
-        print(df)
-        # saveToCloset(df)
-        # plot(df)
+    df = appendNewTimes(df, punchTimes)
+    saveToCloset(df)
+    plot(df)

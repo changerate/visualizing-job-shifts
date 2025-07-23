@@ -5,6 +5,8 @@ datetime
 argparse
 pathlib
 
+copy 
+
 gspread
 google-auth
 
