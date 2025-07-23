@@ -1,0 +1,10 @@
+pandas
+matplotlib
+datetime
+datetime
+argparse
+
+gspread
+google-auth
+
+python-dotenv

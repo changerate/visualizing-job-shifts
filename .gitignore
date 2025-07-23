@@ -1,5 +1,7 @@
 .vscode
 .DS_Store
+/api-keys/*
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
