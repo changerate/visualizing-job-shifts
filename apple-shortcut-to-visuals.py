@@ -101,6 +101,44 @@ def loadFromGoogleSheets(sheetName="Staples Finances 2025"):
 
 
 
+def pullLastUpdatedWorkingSheet(workingSheetsCloset='sheet-closet/working-sheets/', originalSheetsCloset='sheet-closet/original-sheets/'):
+
+    excluded = {"secret.key", "config.key", ".keep"}
+
+    # Get the name of the last updated csv file in the working sheet closet 
+    files = [os.path.join(workingSheetsCloset, f) for f in os.listdir(workingSheetsCloset)]
+    files = [f for f in files if os.path.isfile(f) and os.path.basename(f) not in excluded]
+
+    if not files: 
+        print(f"Notice: No working sheets stored. Pulling from the original's closet.")
+        # pull from original sheets instead and update working sheets
+        # Get the name of the last updated csv file in the ORIGINALS sheet closet 
+        origFiles = [os.path.join(originalSheetsCloset, f) for f in os.listdir(originalSheetsCloset)]
+        origFiles = [f for f in origFiles if os.path.isfile(f) and os.path.basename(f) not in excluded]
+        
+        if not origFiles: 
+            print(f"Error: No original sheets stored.")
+            return pd.DataFrame([])
+
+        csvName = max(origFiles, key=os.path.getmtime)
+        # print(f"Updating the working sheets with {csvName}.")
+
+        df = pd.DataFrame(pd.read_csv(csvName))
+        return df
+
+    else: 
+        csvName = max(files, key=os.path.getmtime)
+        print(f"Pulling working sheet: {csvName}")
+        return pd.DataFrame(pd.read_csv(csvName))
+    
+
+
+
+
+
+
+
+
 
 def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):     
     """
@@ -329,33 +367,27 @@ def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'):
 
 
 
-def plot(df): 
+def plot(shifts): 
     """
     PLOTTING
     """
         
     fig, ax = plt.subplots(figsize=(20, 6))
 
-
-    for _, row in df.iterrows():
-        if pd.isna(row['DATE']) or pd.isna(row['IN']) or pd.isna(row['OUT']):
-            continue
-        if row['DATE'] == '' or row['IN'] == '' or row['OUT'] == '':
-            continue
-        
-        duration = to24HrFloat(row['OUT']) - to24HrFloat(row['IN'])
-            
+    for shift in shifts: 
         # label full shifts light green
         color = 'skyblue'
-        if duration >= 8:
+        if shift.hours_worked() >= 8:
             color='lightgreen'
-        
-        ax.bar(x=row['DATE'],
-            height=duration,
-            bottom=to24HrFloat(row['IN']),
+
+        ax.bar(
+            x=shift.clock_in.date(),
+            height=shift.hours_worked(),
+            bottom=to24HrFloat(shift.clock_in),
             label='shift',
             width=0.93,
-            color=color)
+            color=color
+        )
 
 
     # title 
@@ -375,6 +407,8 @@ def plot(df):
     # format x axis 
     ax.set_xlabel("Day")
     ax.tick_params(axis='x', rotation=45)
+
+
     if CURRENT_YEAR == '2025':
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
     else: 
@@ -624,7 +658,4 @@ if __name__ == '__main__':
     shifts = addNewShift(shifts, punchTimes)
 
     saveShiftsToDB(shifts)
-    shifts = []
-    shifts = loadShifts()
-    printShifts(shifts)
-    # plot(df)
+    plot(shifts)

@@ -68,36 +68,6 @@ def standardize(df):
 
 
 
-def pullLastUpdatedWorkingSheet(workingSheetsCloset='sheet-closet/working-sheets/', originalSheetsCloset='sheet-closet/original-sheets/'):
-
-    # Get the name of the last updated csv file in the working sheet closet 
-    files = [os.path.join(workingSheetsCloset, f) for f in os.listdir(workingSheetsCloset)]
-    files = [f for f in files if os.path.isfile(f)]
-
-    if not files: 
-        print(f"Notice: No working sheets stored. Pulling from the original's closet.")
-        # pull from original sheets instead and update working sheets
-        # Get the name of the last updated csv file in the ORIGINALS sheet closet 
-        origFiles = [os.path.join(originalSheetsCloset, f) for f in os.listdir(originalSheetsCloset)]
-        origFiles = [f for f in origFiles if os.path.isfile(f)]
-        
-        if not origFiles: 
-            print(f"Error: No original sheets stored.")
-            return pd.DataFrame([])
-
-        csvName = max(origFiles, key=os.path.getmtime)
-        # print(f"Updating the working sheets with {csvName}.")
-
-        df = pd.DataFrame(pd.read_csv(csvName))
-        return df
-
-    else: 
-        csvName = max(files, key=os.path.getmtime)
-        print(f"Pulling working sheet: {csvName}")
-        return pd.DataFrame(pd.read_csv(csvName))
-    
-
-
 
 
 

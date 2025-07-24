@@ -13,7 +13,10 @@ databases/**
 !sheet-closet/original-sheets/
 !sheet-closet/working-sheets/
 !databases/
-
+!api-keys/.keep
+!sheet-closet/original-sheets/.keep
+!sheet-closet/working-sheets/.keep
+!databases/.keep
 
 
 
