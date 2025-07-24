@@ -1,4 +1,4 @@
-from rates import PAY_RATE_TABLE
+from utilities.rates import PAY_RATE_TABLE
 from datetime import datetime, timedelta
 
 class WorkShift:
@@ -18,7 +18,7 @@ class WorkShift:
         IN:     Wed Jul 23      8:00 AM
         OUT:    Wed Jul 23      4:00 PM
         Skipped lunch this shift.
-        Shift length:   8.0
+        Shift length:   8.00
         Payrate:        copy center
         Payrate:        $18.50 per hour
         Pre-tax:        $148.00
@@ -32,7 +32,7 @@ class WorkShift:
             print(f"Lunch start: \t{self.lunch_in.strftime("%a %b %d\t%-I:%M %p")}")
             print(f"Lunch end: \t{self.lunch_out.strftime("%a %b %d\t%-I:%M %p")}")
 
-        print(f"Shift length: \t{self.hours_worked()}")
+        print(f"Shift length: \t{self.hours_worked():.2f}")
         print(f"Payrate: \t{self.rate_type}")
         print(f"Payrate: \t${self.hourly_rate:.2f} per hour")
         print(f"Pre-tax: \t${self.before_tax_earnings():.2f}")
@@ -51,6 +51,18 @@ class WorkShift:
 
     def before_tax_earnings(self) -> float:
         return round(self.hours_worked() * self.hourly_rate, 2)
+
+
+    @staticmethod
+    def from_row(row):
+        return WorkShift(
+            clock_in=datetime.fromisoformat(row[0]),
+            clock_out=datetime.fromisoformat(row[1]),
+            lunch_in=datetime.fromisoformat(row[2]) if row[2] else datetime(1, 1, 1, 1),
+            lunch_out=datetime.fromisoformat(row[3]) if row[3] else datetime(1, 1, 1, 1),
+            rate_type=row[4],
+            notes=row[5]
+        )
 
 
     def __repr__(self):

@@ -15,22 +15,35 @@ from pathlib import Path
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
+# user made files 
+from classes.shiftClass import WorkShift
+from utilities.necessary_data import NECESSARY_DATA
+from utilities.ut_functions import *
 
 
+import sqlite3
+
+
+
+
+
+
+
+
+SCRIPTS_DIR = Path(__file__).parent
 
 parser = argparse.ArgumentParser(description="Visualize Staples shifts.")
-parser.add_argument('--csv', type=str, default='/Users/carlos_1/Documents/GitHub/visualizing-job-shifts/Staples Finances 2025.csv', help='CSV file name')
+parser.add_argument('--csv', type=str, default=SCRIPTS_DIR / 'sheet-closet/original-sheets/Staples Finances 2025.csv', help='CSV file name')
 parser.add_argument('--year', type=str, default='2025', help='Year of data (2024 or 2025)')
 parser.add_argument('--punchTimes', type=str, default='', help='Punch times (Date Time or Time) seperated by new line character.')
 parser.add_argument('--pullSheetsFirst', type=str, default=False, help='First pull from Google Sheets.')
 args = parser.parse_args()
 
 
-
+CSV_NAME = args.csv
 CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
 PULL_SHEETS_FIRST = args.pullSheetsFirst
-SCRIPTS_DIR = Path(__file__).parent
 
 
 
@@ -92,9 +105,6 @@ def loadFromGoogleSheets(sheetName="Staples Finances 2025"):
 def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):     
     """
     Remove columns that are over 'threshold' percent NaN
-    yearDivider the name of a column containing mostly barren cells. 
-    Its purpose is to divide between upper and lower years. 
-    The default name of the column is YEAR SELECTOR.
     """
     try: 
     
@@ -136,49 +146,47 @@ def parsePunches():
     Returns: empty list or a list of the punch dates and times in the datetime object format
 
     This also keeps track of the number of punches on the same day.
-
-    turns it into a list if tuples: 
-    [(datetime.datetime(yr, mm, dd, hr, m), num_punches), (datetime.datetime(yr, mm, dd, hr0,m22), num_punches)]
     """
 
     if not PUNCH_TIMES: 
         print(f"Warning: No punch times entered.")
         return []
+
     
-    punchTimesSet = set()
+    allTimePunches = set()
     try: 
         
-        # convert the timestamp to a datetime object
+        # convert the punch to a datetime object
         punchTimes = PUNCH_TIMES.split('\n')
         for punchTime in punchTimes:
-            if punchTime: 
-                punchTimesSet.add(datetime.strptime(punchTime, "%b %d, %Y at %I:%M %p"))
+            if punchTime:   
+                allTimePunches.add(datetime.strptime(punchTime, "%b %d, %Y at %I:%M %p"))
 
         
         # Count the number of punches in the day 
-        punchTimes = sorted(punchTimesSet)
-        lastDay = 100
-        punchNums = []
-        punchNum = 0
-        for punchTime in punchTimes:
+        # punchTimes = sorted(allTimePunches)
+        # lastDay = 100
+        # punchNums = []
+        # punchNum = 0
+        # for punchTime in punchTimes:
             
-            if not punchTime: 
-                continue
+        #     if not punchTime: 
+        #         continue
             
-            if punchTime.day == lastDay:
-                # either update the number of punches on the date...
-                punchNum += 1
-                punchNums.append(punchNum)
-            else: 
-                # or reset back to one punch for a new day 
-                lastDay = punchTime.day
-                punchNum = 1 
-                punchNums.append(punchNum)
+        #     if punchTime.day == lastDay:
+        #         # either update the number of punches on the date...
+        #         punchNum += 1
+        #         punchNums.append(punchNum)
+        #     else: 
+        #         # or reset back to one punch for a new day 
+        #         lastDay = punchTime.day
+        #         punchNum = 1 
+        #         punchNums.append(punchNum)
 
-        punchTimes = sorted(zip(punchTimes, punchNums))
+        # punchTimes = sorted(zip(punchTimes, punchNums))
         
         
-        # Check if there's the correct punch times
+        # Check if there's the correct number of punches
         if len(punchTimes) != 2 and len(punchTimes) != 4: 
             print(f"Invalid number of punches for a shift! Punches: {len(punchTimes)}")
             return []
@@ -188,7 +196,7 @@ def parsePunches():
         print(f"Error getting and seperating the punch times: {e}")
         return []
 
-    return punchTimes
+    return sorted(punchTimes)
 
 
 
@@ -197,38 +205,35 @@ def parsePunches():
 
 
 
-def appendNewTimes(df, punchTimes):
+def addNewShift(shifts: list[WorkShift], punchTimes):
     if len(punchTimes) == 0: 
-        return df
+        return shifts
 
-    inTime = punchTimes[0][0].time()
-    newDate = punchTimes[0][0].date()
+    inTime = punchTimes[0].time()
+    newDate = punchTimes[0].date()
+    lunchIn = datetime(1, 1, 1, 1)
+    lunchOut = datetime(1, 1, 1, 1)
 
     if len(punchTimes) == 2: 
-        outTime = punchTimes[1][0].time()
-        hours = to24HrFloat(outTime)-to24HrFloat(inTime)
-        newRow = {"DATE": newDate, "IN": inTime, "OUT": outTime, "hours": hours}
+        outTime = punchTimes[1].time()
 
     elif len(punchTimes) == 4:
-        outTime = punchTimes[3][0].time()
-        lunchIn = punchTimes[1][0].time()
-        lunchOut = punchTimes[2][0].time()
-        hours = to24HrFloat(outTime)-to24HrFloat(inTime)-(to24HrFloat(lunchOut)-to24HrFloat(lunchIn))
-        newRow = {
-            "DATE": newDate,
-            "IN": inTime,
-            "LUNCH IN": lunchIn,
-            "LUNCH OUT": lunchOut,
-            "OUT": outTime,
-            "hours": hours
-        }
-        
+        lunchIn = punchTimes[1].time()
+        lunchOut = punchTimes[2].time()
+        outTime = punchTimes[3].time()
+    
     else: 
         print(f"Error. Invalid number of punches in a day.")
-        return df
+        return shifts
 
-    newRow = pd.DataFrame([newRow])
-    return pd.concat([newRow, df], ignore_index=True)
+    newShift = WorkShift(
+        clock_in=inTime,
+        lunch_in=lunchIn,
+        lunch_out=lunchOut,
+        clock_out=outTime,
+    )
+        
+    return shifts.append(newShift)
 
 
     
@@ -322,6 +327,8 @@ def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'):
 
 
 
+
+
 def plot(df): 
     """
     PLOTTING
@@ -395,96 +402,41 @@ def plot(df):
 
 
 
+def collectShiftsFromDataFrame(df):
+
+    df = standardize(df)
+
+    shifts = []
 
 
-
-# =====================================================================
-#            UTILITY FUNCTIONS
-# =====================================================================
-
-
-
-def parse_time_flexible(x):
-    if pd.isna(x) or x == '':
-        return pd.NaT
-    
-    if isinstance(x, time):
-        # print(f"x is already correct format")
-        return x
-
-    for fmt in ("%H:%M:%S", "%I:%M %p", "%H:%M"):  # supports 24hr, 12hr, with/without seconds
-        try:
-            stdFormat = datetime.strptime(x, fmt).time()
-            return stdFormat
-        except ValueError:
+    for row in df.itertuples():
+        if not isValidData(row, df.columns):
             continue
-    return pd.NaT  # if none match
-
-
-def parse_date_flexible(x):
-    if pd.isna(x) or x == '':
-        return pd.NaT
-    
-    if isinstance(x, date):
-        # print(f"x is already correct format")
-        return x
-
-    for fmt in ("%Y-%m-%d", "%a %b %d"):  # supports YYYY-MM-DD, Fri Jul 25
-        try:
-            stdFormat = datetime.strptime(x, fmt).date()
-            return stdFormat
-        except ValueError:
-            continue
-    return pd.NaT  # if none match
-
-
-def standardize(df): 
-    """
-    From strings to datetime objecs 
-    """
-    
-    df['IN'] = df['IN'].apply(parse_time_flexible)
-    df['OUT'] = df['OUT'].apply(parse_time_flexible)
-    df['time'] = df['time'].apply(parse_time_flexible)
-    df['DATE'] = df['DATE'].apply(parse_date_flexible)
-
-    return df
-
-
-
-
-
-def pullLastUpdatedWorkingSheet(workingSheetsCloset='sheet-closet/working-sheets/', originalSheetsCloset='sheet-closet/original-sheets/'):
-
-    # Get the name of the last updated csv file in the working sheet closet 
-    files = [os.path.join(workingSheetsCloset, f) for f in os.listdir(workingSheetsCloset)]
-    files = [f for f in files if os.path.isfile(f)]
-
-    if not files: 
-        print(f"Notice: No working sheets stored. Pulling from the original's closet.")
-        # pull from original sheets instead and update working sheets
-        # Get the name of the last updated csv file in the ORIGINALS sheet closet 
-        origFiles = [os.path.join(originalSheetsCloset, f) for f in os.listdir(originalSheetsCloset)]
-        origFiles = [f for f in origFiles if os.path.isfile(f)]
         
-        if not origFiles: 
-            print(f"Error: No original sheets stored.")
-            return pd.DataFrame([])
+        date = row.DATE
 
-        csvName = max(origFiles, key=os.path.getmtime)
-        # print(f"Updating the working sheets with {csvName}.")
+        newShift = WorkShift(
+            clock_in=datetime.combine(date, row.IN),
+            clock_out=datetime.combine(date, row.OUT),
+            rate_type='staples copy center',
+        )
 
-        df = pd.DataFrame(pd.read_csv(csvName))
-        return df
+        shifts.append(newShift)
 
-    else: 
-        csvName = max(files, key=os.path.getmtime)
-        print(f"Pulling working sheet: {csvName}")
-        return pd.DataFrame(pd.read_csv(csvName))
-    
+    return shifts
 
 
 
+
+
+
+
+
+
+
+# =====================================================================
+#           MORE UTILITY FUNCTIONS
+# =====================================================================
 
 
 def checkYear():
@@ -506,94 +458,24 @@ def checkYear():
 
 
 
-def dateToString(dt, format_str="%Y-%m-%d"):
-    """
-    Convert various date/time objects to date string
-    
-    Args:
-        dt: string, datetime.date, datetime.time, or datetime object
-        format_str: output format (default: "YYYY-MM-DD")
-    
-    Returns:
-        String representation of the date
-    """
-    
-    if isinstance(dt, str):
-        return dt  # Already a string, return as-is
-    
-    elif isinstance(dt, datetime):
-        return dt.strftime(format_str)
-    
-    elif isinstance(dt, date):
-        return dt.strftime(format_str)
-    
-    elif isinstance(dt, time):
-        # Time objects don't have date info, use today's date
-        today = date.today()
-        return today.strftime(format_str)
-    
-    else:
-        raise TypeError(f"Unsupported type: {type(dt)}")
-
-    
-
-
-
-
-
-def to24HrFloat(theTime):
-    """
-    Takes a time like 4:30 PM and returns a time like 16.5
-    """
-
-    if pd.isna(theTime) or theTime == '':
-        return pd.NaT
-
-    
-    if isinstance(theTime, str):
-        for fmt in ("%I:%M %p", "%H:%M", "%H:%M:%S"):
-            try:
-                timeObj = datetime.strptime(theTime.strip(), fmt).time()
-                return timeObj.hour + timeObj.minute / 60
-            except (ValueError, TypeError):
-                continue
-
-        raise ValueError(f"Unrecognized format: {theTime}")
-
-
-    elif isinstance(theTime, datetime):
-        return theTime.time().hour + theTime.time().minute / 60 + theTime.time().second / 3600
-
-
-    elif isinstance(theTime, time):
-        return theTime.hour + theTime.minute / 60 + theTime.second / 3600
-
-
-    else:
-        raise TypeError("Unsupported input type")
-
-
-
-
-
-
-
-
-def labelYears(df):
+def labelYears(df, yearDivider='YEAR SELECTOR'):
 
     ## Label 2023 and 2024 data
     lastRowOf2024 = len(df)
     firstRowOf2024 = len(df)
+    
+    
     if CURRENT_YEAR == '2024':
         # Find the last row of 2024
-        for idx, cell in df['YEAR SELECTOR'].items():
+        for idx, cell in df[yearDivider].items():
 
             if cell == '2024  ⬆️':
                 lastRowOf2024 = idx
 
+
     elif CURRENT_YEAR == '2025':
         # Find the first row of 2024
-        for idx, cell in df['YEAR SELECTOR'].items():
+        for idx, cell in df[yearDivider].items():
 
             if cell == '2024 ⬇️':
                 firstRowOf2024 = idx
@@ -617,7 +499,6 @@ def labelYears(df):
             errors='coerce'
             ).dt.date
 
-
     return df
 
 
@@ -626,22 +507,69 @@ def labelYears(df):
 
 
 
+def saveShiftsToDB(shifts, dbPath=SCRIPTS_DIR / 'databases/shifts.db'):
+    conn = sqlite3.connect(dbPath)
+    cur = conn.cursor()
 
-def printTypes(df):
-    """
-    Simply prints the datatypes of the most important columns. IN, OUT, DATE, time
-    """
+    cur.execute("DROP TABLE IF EXISTS shifts")
+    cur.execute("""
+        CREATE TABLE shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clock_in TEXT,
+            clock_out TEXT,
+            lunch_in TEXT,
+            lunch_out TEXT,
+            rate_type TEXT,
+            notes TEXT
+        )
+    """)
 
-    print()
-    print(f"=========================================")
-    print(f"Testing the types: ")
-    for col in df.columns:
-        for cell in df[col]:
-            if col != 'IN' and col != 'OUT' and col != 'time' and col != 'DATE':
-                continue
-            print(f"The {cell}\tcell is of type:\t{type(cell)}")
-    print(f"=========================================")
-    print()
+
+    for shift in shifts:
+        cur.execute(
+            """
+            INSERT INTO shifts (
+                clock_in, clock_out, lunch_in, lunch_out, rate_type, notes
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """, 
+            (
+                shift.clock_in.isoformat(), 
+                shift.clock_out.isoformat(),
+                shift.lunch_in.isoformat(),
+                shift.lunch_out.isoformat(),
+                shift.rate_type.format(),
+                shift.notes.format()
+            )
+        )
+
+
+    conn.commit()
+    conn.close()
+
+
+
+
+
+
+
+def loadShifts(dbPath=SCRIPTS_DIR / 'databases/shifts.db'):
+    conn = sqlite3.connect(dbPath)
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT clock_in, clock_out, lunch_in, lunch_out, rate_type, notes 
+        FROM shifts
+    """) 
+
+    shifts = [WorkShift.from_row(row) for row in cur.fetchall()]
+    conn.close()
+    return shifts
+
+
+
+
+
+
 
 
 
@@ -675,12 +603,11 @@ if __name__ == '__main__':
         # Pull directly from Google Sheets
         df = loadFromGoogleSheets()
 
-        df.to_csv(SCRIPTS_DIR / "my_data.csv", index=False, float_format="%.2f")
+        df.to_csv(CSV_NAME, index=False, float_format="%.2f")
 
         if df.empty:
             exit()
         df = labelYears(df)
-        df = standardize(df)
 
 
     else: 
@@ -688,21 +615,16 @@ if __name__ == '__main__':
         df = pullLastUpdatedWorkingSheet()
         if df.empty:
             exit()
-        df = standardize(df)
-    
-    
-    df = clearNaNCols(df)
-    
 
-    if df.empty: 
+    shifts = collectShiftsFromDataFrame(df)
+
+    if not shifts: 
         exit()
     
+    shifts = addNewShift(shifts, punchTimes)
 
-    df = cleanData(df)
-    
-    if df.empty: 
-        exit()
-    
-    df = appendNewTimes(df, punchTimes)
-    saveToCloset(df)
-    plot(df)
+    saveShiftsToDB(shifts)
+    shifts = []
+    shifts = loadShifts()
+    printShifts(shifts)
+    # plot(df)
