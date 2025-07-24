@@ -1,7 +1,7 @@
 # Visualizing the shifts that I've worked at Staples
 
-![Graph 2023-24](./Staples%20Finances%202023-24.png)
-![Graph 2025](./Staples%20Finances%202025.png)
+![Graph 2023-24](./assets/Staples%20Finances%202023-24.png)
+![Graph 2025](./assets/Staples%20Finances%202025.png)
 
 The data comes from my Google Sheets.
 I visualized it using matplot.
