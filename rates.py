@@ -1,5 +1,5 @@
 # rates.py
 PAY_RATE_TABLE = {
-    "cashier": 17.80,
-    "copy center": 18.50
+    "staples cashier": 17.80,
+    "staples copy center": 18.50
 }

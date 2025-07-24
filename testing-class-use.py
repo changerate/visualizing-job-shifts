@@ -6,7 +6,7 @@ from datetime import date, time, datetime
 shift = WorkShift(
     clock_in=datetime(2025, 7, 23, 8), 
     clock_out=datetime(2025, 7, 23, 16), 
-    rate_type='copy center',
+    rate_type='staples copy center',
     notes='This is a shift!!')
 
 shift.view
