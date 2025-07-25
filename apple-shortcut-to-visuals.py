@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import os
 import copy 
+import sqlite3
 
 import gspread
 from pathlib import Path
@@ -20,8 +21,6 @@ from classes.shiftClass import WorkShift
 from utilities.necessary_data import NECESSARY_DATA
 from utilities.ut_functions import *
 
-
-import sqlite3
 
 
 
@@ -44,6 +43,95 @@ CSV_NAME = args.csv
 CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
 PULL_SHEETS_FIRST = args.pullSheetsFirst
+SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
+
+
+
+
+
+
+
+
+
+
+
+# # ==============================================================================
+# #            MAIN FUNCTION
+# # ==============================================================================
+
+
+# def main():
+#     # FIRST GET SHIFTS FROM GOOGLE SHEETS
+#     # df = loadFromGoogleSheets()
+#     # df = labelYears(df)
+#     # shifts = collectShiftsFromDataFrame(df)
+
+#     shifts = pullShiftsFromDB(SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
+#     saveShiftsToDB(shifts, SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
+#     shifts = []
+#     shifts = pullShiftsFromDB(SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
+#     printShifts(shifts)
+
+
+
+
+
+
+
+
+
+
+
+
+
+def main():
+    if not checkYear():
+        exit()
+    
+    
+    punchTimes = parsePunches()
+    
+    
+    if PULL_SHEETS_FIRST: 
+        # Pull directly from Google Sheets
+        df = loadFromGoogleSheets()
+
+        # save this to the originals sheet closet 
+        df.to_csv(CSV_NAME, index=False, float_format="%.2f")
+
+        if df.empty:
+            exit()
+
+        df = labelYears(df) # for when the data does not have the years attached
+
+
+    else: 
+        # Pull from working database
+        shifts = pullShiftsFromDB()
+        
+        if not shifts:
+            exit()
+
+
+    # else: 
+    #     # Pull from the existing sheet closet
+    #     df = pullLastUpdatedWorkingSheet()
+    #     if df.empty:
+    #         exit()
+
+    shifts = collectShiftsFromDataFrame(df)
+
+    if not shifts: 
+        exit()
+    
+    shifts = addNewShift(shifts, punchTimes)
+
+    saveShiftsToDB(shifts)
+    plot(shifts)
+    
+
+
+
 
 
 
@@ -492,7 +580,7 @@ def checkYear():
 
 
 
-def labelYears(df, yearDivider='YEAR SELECTOR'):
+def labelYears(df, yearDivider='YEAR SELECTOR') -> pd.DataFrame:
 
     ## Label 2023 and 2024 data
     lastRowOf2024 = len(df)
@@ -541,63 +629,6 @@ def labelYears(df, yearDivider='YEAR SELECTOR'):
 
 
 
-def saveShiftsToDB(shifts, dbPath=SCRIPTS_DIR / 'databases/shifts.db'):
-    conn = sqlite3.connect(dbPath)
-    cur = conn.cursor()
-
-    cur.execute("DROP TABLE IF EXISTS shifts")
-    cur.execute("""
-        CREATE TABLE shifts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            clock_in TEXT,
-            clock_out TEXT,
-            lunch_in TEXT,
-            lunch_out TEXT,
-            rate_type TEXT,
-            notes TEXT
-        )
-    """)
-
-
-    for shift in shifts:
-        cur.execute(
-            """
-            INSERT INTO shifts (
-                clock_in, clock_out, lunch_in, lunch_out, rate_type, notes
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """, 
-            (
-                shift.clock_in.isoformat(), 
-                shift.clock_out.isoformat(),
-                shift.lunch_in.isoformat(),
-                shift.lunch_out.isoformat(),
-                shift.rate_type.format(),
-                shift.notes.format()
-            )
-        )
-
-
-    conn.commit()
-    conn.close()
-
-
-
-
-
-
-
-def loadShifts(dbPath=SCRIPTS_DIR / 'databases/shifts.db'):
-    conn = sqlite3.connect(dbPath)
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT clock_in, clock_out, lunch_in, lunch_out, rate_type, notes 
-        FROM shifts
-    """) 
-
-    shifts = [WorkShift.from_row(row) for row in cur.fetchall()]
-    conn.close()
-    return shifts
 
 
 
@@ -608,54 +639,7 @@ def loadShifts(dbPath=SCRIPTS_DIR / 'databases/shifts.db'):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-# =====================================================================
-#            MAIN FUNCTION
-# =====================================================================
 
 
 if __name__ == '__main__':
-    
-    if not checkYear():
-        exit()
-    
-    
-    punchTimes = parsePunches()
-    
-    
-    if PULL_SHEETS_FIRST: 
-        # Pull directly from Google Sheets
-        df = loadFromGoogleSheets()
-
-        df.to_csv(CSV_NAME, index=False, float_format="%.2f")
-
-        if df.empty:
-            exit()
-        df = labelYears(df)
-
-
-    else: 
-        # Pull from the existing sheet closet 
-        df = pullLastUpdatedWorkingSheet()
-        if df.empty:
-            exit()
-
-    shifts = collectShiftsFromDataFrame(df)
-
-    if not shifts: 
-        exit()
-    
-    shifts = addNewShift(shifts, punchTimes)
-
-    saveShiftsToDB(shifts)
-    plot(shifts)
+    main()

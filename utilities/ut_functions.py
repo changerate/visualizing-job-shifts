@@ -2,11 +2,15 @@ import pandas as pd
 from datetime import datetime, date, time
 import numpy as np
 import os
+from pathlib import Path
+import sqlite3
 
 from classes.shiftClass import WorkShift
 from utilities.necessary_data import NECESSARY_DATA
 from utilities.ut_functions import *
 
+SCRIPTS_DIR = Path(__file__).parent
+SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
 
 
 
@@ -33,6 +37,10 @@ def parse_time_flexible(x):
         except ValueError:
             continue
     return pd.NaT  # if none match
+
+
+
+
 
 
 def parse_date_flexible(x):
@@ -68,6 +76,119 @@ def standardize(df):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+def saveShiftsToDB(shifts, dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
+    # Ensure the directory exists (in case the path is nested)
+    os.makedirs(dbPath.parent, exist_ok=True)
+
+
+    # Create the table only if it doesn't already exist
+    conn = sqlite3.connect(dbPath)
+    cur = conn.cursor()
+    
+    # Add UNIQUE constraint to avoid duplicates
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clock_in TEXT,
+            clock_out TEXT,
+            lunch_in TEXT,
+            lunch_out TEXT,
+            rate_type TEXT,
+            notes TEXT,
+            UNIQUE(clock_in, clock_out)
+        )
+    """)
+
+
+    for shift in shifts:
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO shifts (
+                clock_in, clock_out, lunch_in, lunch_out, rate_type, notes
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """, 
+            (
+                shift.clock_in.isoformat() if shift.clock_in else None, 
+                shift.clock_out.isoformat() if shift.clock_in else None,
+                shift.lunch_in.isoformat() if shift.clock_in else None,
+                shift.lunch_out.isoformat() if shift.clock_in else None,
+                shift.rate_type.format() if shift.clock_in else None,
+                shift.notes.format() if shift.clock_in else None
+            )
+        )
+
+
+    conn.commit()
+    conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def pullShiftsFromDB(dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
+    """
+    Pull from existing SQL Lite DB that stores the converted versions of the 
+    WorkShift instances.
+    """
+    if not os.path.exists(dbPath):
+        print(f"Database file does not exist: {dbPath}")
+        return []
+
+    try:
+        conn = sqlite3.connect(dbPath)
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='shifts'
+        """)
+
+        if not cur.fetchone():
+            print("Table 'shifts' does not exist in the database.")
+            return []
+
+        cur.execute("""
+            SELECT clock_in, clock_out, lunch_in, lunch_out, rate_type, notes 
+            FROM shifts
+        """) 
+
+        rows = cur.fetchall()
+        shifts = [WorkShift.from_row(row) for row in rows]
+
+
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+        return []
+
+
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
+    return shifts
 
 
 

@@ -55,6 +55,8 @@ class WorkShift:
 
     @staticmethod
     def from_row(row):
+        """
+        Helps with loading shifts from a SQL database"""
         return WorkShift(
             clock_in=datetime.fromisoformat(row[0]),
             clock_out=datetime.fromisoformat(row[1]),
