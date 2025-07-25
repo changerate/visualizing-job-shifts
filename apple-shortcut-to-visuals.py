@@ -99,27 +99,14 @@ def main():
         # save this to the originals sheet closet 
         df.to_csv(CSV_NAME, index=False, float_format="%.2f")
 
-        if df.empty:
-            exit()
-
         df = labelYears(df) # for when the data does not have the years attached
+        shifts = collectShiftsFromDataFrame(df)
 
 
     else: 
         # Pull from working database
         shifts = pullShiftsFromDB()
         
-        if not shifts:
-            exit()
-
-
-    # else: 
-    #     # Pull from the existing sheet closet
-    #     df = pullLastUpdatedWorkingSheet()
-    #     if df.empty:
-    #         exit()
-
-    shifts = collectShiftsFromDataFrame(df)
 
     if not shifts: 
         exit()
@@ -127,7 +114,7 @@ def main():
     shifts = addNewShift(shifts, punchTimes)
 
     saveShiftsToDB(shifts)
-    plot(shifts)
+    plot(shifts, datetime(2025, 2, 1), datetime(2026, 1, 1))
     
 
 
@@ -455,14 +442,21 @@ def saveToCloset(df, workingSheetsCloset='sheet-closet/working-sheets/'):
 
 
 
-def plot(shifts): 
+def plot(shifts, minDate, maxDate): 
     """
     PLOTTING
     """
         
     fig, ax = plt.subplots(figsize=(20, 6))
+    numShifts = 0
+    
 
     for shift in shifts: 
+        if shift.clock_in <= minDate or shift.clock_in >= maxDate:
+            continue
+
+        numShifts += 1
+
         # label full shifts light green
         color = 'skyblue'
         if shift.hours_worked() >= 8:
@@ -501,7 +495,11 @@ def plot(shifts):
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
     else: 
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d %Y'))
-    ax.xaxis.set_major_locator(mdates.DayLocator(interval=round(len(df) / 18)))
+    
+    print(f"The number of shifts: {numShifts}")
+
+    interv = max(1, -(-numShifts // 18))  # ensures interval ≥ 1
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=interv))
 
 
     # custom legend entries

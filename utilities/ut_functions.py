@@ -9,7 +9,7 @@ from classes.shiftClass import WorkShift
 from utilities.necessary_data import NECESSARY_DATA
 from utilities.ut_functions import *
 
-SCRIPTS_DIR = Path(__file__).parent
+SCRIPTS_DIR = Path(__file__).parent.parent
 SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
 
 
