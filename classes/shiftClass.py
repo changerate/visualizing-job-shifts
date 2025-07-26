@@ -2,7 +2,7 @@ from utilities.rates import PAY_RATE_TABLE
 from datetime import datetime, timedelta
 
 class WorkShift:
-    def __init__(self, clock_in: datetime, clock_out: datetime, rate_type: str, notes: str = "", lunch_in: datetime = datetime(1, 1, 1, 1), lunch_out: datetime = datetime(1, 1, 1, 1)):
+    def __init__(self, clock_in: datetime, clock_out: datetime, rate_type: str = 'staples copy center', notes: str = "", lunch_in: datetime = datetime(1, 1, 1, 1), lunch_out: datetime = datetime(1, 1, 1, 1)):
         self.clock_in = clock_in
         self.clock_out = clock_out
         self.lunch_in = lunch_in
@@ -19,7 +19,7 @@ class WorkShift:
         OUT:    Wed Jul 23      4:00 PM
         Skipped lunch this shift.
         Shift length:   8.00
-        Payrate:        copy center
+        Payrate:        staples copy center
         Payrate:        $18.50 per hour
         Pre-tax:        $148.00
         """

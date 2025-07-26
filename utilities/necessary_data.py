@@ -1,9 +1,6 @@
 # necessary data
 from datetime import date, time, datetime
 
-"""
-this data cannot be null
-"""
 
 NECESSARY_DATA = {
     "DATE": datetime.date,

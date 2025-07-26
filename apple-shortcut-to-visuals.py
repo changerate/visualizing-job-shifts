@@ -1,5 +1,4 @@
 # Visualizing the shifts that I've worked at Staples
-# This comes from my Google Sheets
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -17,7 +16,9 @@ from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
 # user made files 
+from utilities.workshift_data import WORKSHIFT_NAMES, GOOGLE_SHEET_COL_NAMES
 from classes.shiftClass import WorkShift
+from classes.googleSheetClass import GoogleSheetManager
 from utilities.necessary_data import NECESSARY_DATA
 from utilities.ut_functions import *
 
@@ -36,6 +37,7 @@ parser.add_argument('--csv', type=str, default=SCRIPTS_DIR / 'sheet-closet/origi
 parser.add_argument('--year', type=str, default='2025', help='Year of data (2024 or 2025)')
 parser.add_argument('--punchTimes', type=str, default='', help='Punch times (Date Time or Time) seperated by new line character.')
 parser.add_argument('--pullSheetsFirst', type=str, default=False, help='First pull from Google Sheets.')
+parser.add_argument('--sheetName', type=str, default="Staples Finances 2025", help='Name of the Google Sheet.')
 args = parser.parse_args()
 
 
@@ -44,6 +46,7 @@ CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
 PULL_SHEETS_FIRST = args.pullSheetsFirst
 SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
+SHEET_NAME = args.sheetName
 
 
 
@@ -54,67 +57,28 @@ SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
 
 
 
-
-# # ==============================================================================
-# #            MAIN FUNCTION
-# # ==============================================================================
-
-
-# def main():
-#     # FIRST GET SHIFTS FROM GOOGLE SHEETS
-#     # df = loadFromGoogleSheets()
-#     # df = labelYears(df)
-#     # shifts = collectShiftsFromDataFrame(df)
-
-#     shifts = pullShiftsFromDB(SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
-#     saveShiftsToDB(shifts, SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
-#     shifts = []
-#     shifts = pullShiftsFromDB(SCRIPTS_DIR / SHIFTS_SQL_DB_NAME)
-#     printShifts(shifts)
-
-
-
-
-
-
-
-
-
-
-
+# ==============================================================================
+#            MAIN FUNCTION
+# ==============================================================================
 
 
 def main():
     if not checkYear():
         exit()
     
+    sheetManager = GoogleSheetManager(sheet_name=SHEET_NAME)
     
-    punchTimes = parsePunches()
+    # newShift = WorkShift(
+    #     clock_in=datetime(2025, 7, 25, 16), 
+    #     clock_out=datetime(2025, 7, 25, 20), 
+    #     notes="ANOTHER FREAKING SHIFT???"
+    # )
+    
+    newShift = parsePunchesIntoOneShift()
+    
+    sheetManager.addNewShiftToSheet(newShift)
     
     
-    if PULL_SHEETS_FIRST: 
-        # Pull directly from Google Sheets
-        df = loadFromGoogleSheets()
-
-        # save this to the originals sheet closet 
-        df.to_csv(CSV_NAME, index=False, float_format="%.2f")
-
-        df = labelYears(df) # for when the data does not have the years attached
-        shifts = collectShiftsFromDataFrame(df)
-
-
-    else: 
-        # Pull from working database
-        shifts = pullShiftsFromDB()
-        
-
-    if not shifts: 
-        exit()
-    
-    shifts = addNewShift(shifts, punchTimes)
-
-    saveShiftsToDB(shifts)
-    plot(shifts, datetime(2025, 2, 1), datetime(2026, 1, 1))
     
 
 
@@ -130,43 +94,54 @@ def main():
 
 
 
-def loadFromGoogleSheets(sheetName="Staples Finances 2025"): 
+
+
+
+
+def parsePunchesIntoOneShift() -> WorkShift: 
     """
-    URGENT: UPDATE THIS TO SAVE INTO THE ORIGINALS DIR.
+    Capture the time punches entered from the command line
+    Returns: empty list or a list of the punch dates and times in the WorkShift format 
+
+    This also keeps track of the number of punches on the same day.
     """
 
+    if not PUNCH_TIMES: 
+        # punch times from the command line 
+        print(f"Warning: No punch times entered.")
+        return None
+
+    
+    allTimePunches = set()
     try: 
-        env_path = SCRIPTS_DIR / ".env"
-        load_dotenv(dotenv_path=env_path)  # automatically looks for .env in the scripts directory
-
-        creds_path = SCRIPTS_DIR / os.getenv("GOOGLE_SHEETS_CREDS_FILE")
         
-        # Define the scopes
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
+        # convert the punch to a WorkShift object
+        punchTimes = PUNCH_TIMES.split('\n')
+        for punchTime in punchTimes:
+            if punchTime:
+                allTimePunches.add(datetime.strptime(punchTime, "%b %d, %Y at %I:%M %p"))
 
-        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
-        client = gspread.authorize(creds)
+        allTimePunches = sorted(allTimePunches)
 
-        # Authorize
-        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
-        client = gspread.authorize(creds)
-
-        # Open sheet by name or URL
-        sheet = client.open(sheetName).sheet1
-        data = sheet.get_all_values()
-
-        # Create DataFrame using first row as header
-        df = pd.DataFrame(data[1:], columns=data[0])
-
-        return df
-
+        # Check if there's the correct number of punches
+        if len(allTimePunches) == 2:
+            clockIn = allTimePunches[0]
+            clockOut = allTimePunches[1]
+            newShift = WorkShift(clock_in=clockIn, clock_out=clockOut,)
+            allTimePunches = newShift
+            
+        elif len(allTimePunches) != 4: 
+            print(f"Invalid number of punches for a shift! Punches: {len(allTimePunches)}")
+            return None
+        
 
     except Exception as e: 
-        print(f"{e}")
-        return pd.DataFrame([])
+        print(f"Error getting and seperating the punch times: {e}")
+        return None
+
+    return allTimePunches
+
+
 
 
 
@@ -253,77 +228,13 @@ def clearNaNCols(df, threshold=0.30, yearDivider='YEAR SELECTOR'):
 
 
 
-def parsePunches(): 
-    """
-    Capture the time punches entered from the command line
-    Returns: empty list or a list of the punch dates and times in the datetime object format
-
-    This also keeps track of the number of punches on the same day.
-    """
-
-    if not PUNCH_TIMES: 
-        print(f"Warning: No punch times entered.")
-        return []
-
-    
-    allTimePunches = set()
-    try: 
-        
-        # convert the punch to a datetime object
-        punchTimes = PUNCH_TIMES.split('\n')
-        for punchTime in punchTimes:
-            if punchTime:   
-                allTimePunches.add(datetime.strptime(punchTime, "%b %d, %Y at %I:%M %p"))
-
-        
-        # Count the number of punches in the day 
-        # punchTimes = sorted(allTimePunches)
-        # lastDay = 100
-        # punchNums = []
-        # punchNum = 0
-        # for punchTime in punchTimes:
-            
-        #     if not punchTime: 
-        #         continue
-            
-        #     if punchTime.day == lastDay:
-        #         # either update the number of punches on the date...
-        #         punchNum += 1
-        #         punchNums.append(punchNum)
-        #     else: 
-        #         # or reset back to one punch for a new day 
-        #         lastDay = punchTime.day
-        #         punchNum = 1 
-        #         punchNums.append(punchNum)
-
-        # punchTimes = sorted(zip(punchTimes, punchNums))
-        
-        
-        # Check if there's the correct number of punches
-        if len(punchTimes) != 2 and len(punchTimes) != 4: 
-            print(f"Invalid number of punches for a shift! Punches: {len(punchTimes)}")
-            return []
-        
-
-    except Exception as e: 
-        print(f"Error getting and seperating the punch times: {e}")
-        return []
-
-    return sorted(punchTimes)
-
-
-
-
-
-
-
 
 def addNewShift(shifts: list[WorkShift], punchTimes):
     if len(punchTimes) == 0: 
         return shifts
 
-    inTime = punchTimes[0].time()
-    newDate = punchTimes[0].date()
+    inTime = punchTimes[0].clock_in.time()
+    newDate = punchTimes[0].clock_in.date()
     lunchIn = datetime(1, 1, 1, 1)
     lunchOut = datetime(1, 1, 1, 1)
 
@@ -336,7 +247,7 @@ def addNewShift(shifts: list[WorkShift], punchTimes):
         outTime = punchTimes[3].time()
     
     else: 
-        print(f"Error. Invalid number of punches in a day.")
+        print(f"Error. Invalid number of punches in a day: {len(punchTimes)}")
         return shifts
 
     newShift = WorkShift(
@@ -561,7 +472,6 @@ def collectShiftsFromDataFrame(df):
 
 def checkYear():
     try: 
-        
         # year checking
         if 2022 >= int(CURRENT_YEAR) or int(CURRENT_YEAR) > 2025: # This needs to be updated to the 'current' year 
             print(f"Error. Incorrect parameters entered: {CURRENT_YEAR}")
