@@ -7,6 +7,7 @@ import sqlite3
 
 from classes.shiftClass import WorkShift
 from utilities.necessary_data import NECESSARY_DATA
+from utilities.workshift_data import *
 from utilities.ut_functions import *
 
 SCRIPTS_DIR = Path(__file__).parent.parent
@@ -22,55 +23,6 @@ SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
 
 
 
-def parse_time_flexible(x):
-    if pd.isna(x) or x == '':
-        return pd.NaT
-    
-    if isinstance(x, time):
-        # print(f"x is already correct format")
-        return x
-
-    for fmt in ("%H:%M:%S", "%I:%M %p", "%H:%M"):  # supports 24hr, 12hr, with/without seconds
-        try:
-            stdFormat = datetime.strptime(x, fmt).time()
-            return stdFormat
-        except ValueError:
-            continue
-    return pd.NaT  # if none match
-
-
-
-
-
-
-def parse_date_flexible(x):
-    if pd.isna(x) or x == '':
-        return pd.NaT
-    
-    if isinstance(x, date):
-        # print(f"x is already correct format")
-        return x
-
-    for fmt in ("%Y-%m-%d", "%a %b %d"):  # supports YYYY-MM-DD, Fri Jul 25
-        try:
-            stdFormat = datetime.strptime(x, fmt).date()
-            return stdFormat
-        except ValueError:
-            continue
-    return pd.NaT  # if none match
-
-
-def standardize(df): 
-    """
-    From strings to datetime objecs 
-    """
-    
-    df['IN'] = df['IN'].apply(parse_time_flexible)
-    df['OUT'] = df['OUT'].apply(parse_time_flexible)
-    df['time'] = df['time'].apply(parse_time_flexible)
-    df['DATE'] = df['DATE'].apply(parse_date_flexible)
-
-    return df
 
 
 
@@ -84,13 +36,10 @@ def standardize(df):
 
 
 
-
-
-
-def saveShiftsToDB(shifts, dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
+def saveShiftsToDB(shifts: list[WorkShift], dbPath: Path=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
+    print(f"\nSaving {len(shifts)} shifts to database: {dbPath}.")
     # Ensure the directory exists (in case the path is nested)
     os.makedirs(dbPath.parent, exist_ok=True)
-
 
     # Create the table only if it doesn't already exist
     conn = sqlite3.connect(dbPath)
@@ -100,33 +49,39 @@ def saveShiftsToDB(shifts, dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS shifts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
             clock_in TEXT,
             clock_out TEXT,
             lunch_in TEXT,
             lunch_out TEXT,
             rate_type TEXT,
             notes TEXT,
-            UNIQUE(clock_in, clock_out)
+            UNIQUE(date, clock_in, notes)
         )
     """)
 
 
     for shift in shifts:
-        cur.execute(
+        print(f"Saving shift {shift.date} ... ", end='')
+        # print(f"Saving shift {shift.date} in format {shift.date.isoformat()}", end='')
+        response = cur.execute(
             """
             INSERT OR IGNORE INTO shifts (
-                clock_in, clock_out, lunch_in, lunch_out, rate_type, notes
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                date, clock_in, clock_out, lunch_in, lunch_out, rate_type, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """, 
             (
-                shift.clock_in.isoformat() if shift.clock_in else None, 
-                shift.clock_out.isoformat() if shift.clock_in else None,
-                shift.lunch_in.isoformat() if shift.clock_in else None,
-                shift.lunch_out.isoformat() if shift.clock_in else None,
-                shift.rate_type.format() if shift.clock_in else None,
-                shift.notes.format() if shift.clock_in else None
+                shift.date.isoformat(),
+                shift.clock_in.isoformat(),
+                shift.clock_out.isoformat(),
+                shift.lunch_in.isoformat() if shift.lunch_in else None,
+                shift.lunch_out.isoformat() if shift.lunch_out else None,
+                shift.rate_type.strip() if shift.rate_type else None,
+                shift.notes.strip() if shift.notes else None,
             )
         )
+        
+        print(f"✔︎")
 
 
     conn.commit()
@@ -152,6 +107,8 @@ def pullShiftsFromDB(dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
     Pull from existing SQL Lite DB that stores the converted versions of the 
     WorkShift instances.
     """
+    print(f"\nPulling shifts from database: {dbPath}")
+
     if not os.path.exists(dbPath):
         print(f"Database file does not exist: {dbPath}")
         return []
@@ -170,7 +127,7 @@ def pullShiftsFromDB(dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
             return []
 
         cur.execute("""
-            SELECT clock_in, clock_out, lunch_in, lunch_out, rate_type, notes 
+            SELECT date, clock_in, clock_out, lunch_in, lunch_out, rate_type, notes 
             FROM shifts
         """) 
 
@@ -187,7 +144,7 @@ def pullShiftsFromDB(dbPath=SCRIPTS_DIR / SHIFTS_SQL_DB_NAME):
         if 'conn' in locals():
             conn.close()
 
-
+    print(f"Found {len(shifts)} shifts in the db.")
     return shifts
 
 
@@ -231,7 +188,7 @@ def dateToString(dt, format_str="%Y-%m-%d"):
 
 
 
-def to24HrFloat(theTime):
+def to24HrFloat(theTime: time | date | str ):
     """
     Takes a time like 4:30 PM and returns a time like 16.5
     """
@@ -275,31 +232,51 @@ def to24HrFloat(theTime):
 
 def printTypes(df):
     """
-    Simply prints the datatypes of the most important columns. IN, OUT, DATE, time
+    Simply prints the datatypes of the most important columns. 
+    DATE, IN, LUNCH IN, LUNCH OUT, time, hours, notes
     """
 
     print()
-    print(f"=========================================")
+    print(f"==============================================================================")
     print(f"Testing the types: ")
     for col in df.columns:
         for cell in df[col]:
-            if col != 'IN' and col != 'OUT' and col != 'time' and col != 'DATE':
+            if col not in GOOGLE_SHEET_COL_TYPES:
                 continue
-            print(f"The {cell}\tcell is of type:\t{type(cell)}")
-    print(f"=========================================")
+            print(f"Column {col}, \"{cell}\" cell is of type: {type(cell)}")
+    print(f"==============================================================================")
     print()
 
 
 
 
 
-def isValidData(row: tuple, columns: list[str]) -> bool:
+def isValidShiftRow(row, columns: list[str]) -> bool:
+    """
+    Checks on the basis of data like dateCol, inCol, and outCol.
+    If that data is present than it is considered a viable shift.
+    """
+    dateCell = row[WORKSHIFT_TO_SHEET_COLS['date']]
+    inCell = row[WORKSHIFT_TO_SHEET_COLS['clock_in']]
+    outCell = row[WORKSHIFT_TO_SHEET_COLS['clock_out']]
+    
+    print(f"Is it valid? : {row['DATE']}", end='')
+    # print(f"{row}")
 
-    for idx, cell in enumerate(row[1:]):  # skip the Index at position 0
-        if columns[idx] in NECESSARY_DATA and (cell is None or (isinstance(cell, float) and np.isnan(cell)) or pd.isna(cell)):
-            # print(f"FOUND CELL: \t\"{columns[idx]}\" is \"{cell}\"")
-            return False
 
+    if pd.isna(dateCell):
+        print(f" INVALID ✖︎")
+        return False
+        
+    if pd.isna(inCell):
+        print(f" INVALID ✖︎")
+        return False
+
+    if pd.isna(outCell):
+        print(f" INVALID ✖︎")
+        return False
+
+    print(f" kept! ✔︎")
     return True
 
 
@@ -312,9 +289,9 @@ def isValidData(row: tuple, columns: list[str]) -> bool:
 
 
 def printShifts(shifts: list[WorkShift]):
-    print(f"\n======================================================")
+    print(f"\n\n======================================================")
     print(f"======================================================")
-    print(f"The shifts are\n")
+    print(f"\tTHE SHIFTS ARE:")
 
     for shift in shifts: 
         print()
@@ -327,3 +304,22 @@ def printShifts(shifts: list[WorkShift]):
 
 
 
+
+
+
+
+def toStringCSV(df): 
+    """
+    Format time/date columns as strings
+    """
+    # printTypes(df)        
+
+    for col in df.columns:
+        if pd.api.types.is_object_dtype(df[col]):
+            sample = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+            if isinstance(sample, time):
+                df[col] = df[col].apply(lambda t: t.strftime("%H:%M") if pd.notna(t) else '')
+            elif isinstance(sample, date):
+                df[col] = df[col].apply(lambda d: d.strftime("%Y-%m-%d") if pd.notna(d) else '')
+
+    return df

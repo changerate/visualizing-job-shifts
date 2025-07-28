@@ -10,4 +10,5 @@ NECESSARY_DATA = {
     "OUT": datetime.time,
     "time": datetime.time,
     "hours": float,
+    "notes": str,
 }

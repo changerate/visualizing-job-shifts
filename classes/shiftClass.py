@@ -1,8 +1,22 @@
 from utilities.rates import PAY_RATE_TABLE
-from datetime import datetime, timedelta
+from datetime import datetime, time, date
+
+
+
 
 class WorkShift:
-    def __init__(self, clock_in: datetime, clock_out: datetime, rate_type: str = 'staples copy center', notes: str = "", lunch_in: datetime = datetime(1, 1, 1, 1), lunch_out: datetime = datetime(1, 1, 1, 1)):
+    def __init__(
+        self, 
+        date: date,
+        clock_in: time, 
+        clock_out: time, 
+        lunch_in: time = time(1), 
+        lunch_out: time = time(1),
+        rate_type: str = 'staples copy center', 
+        notes: str = "", 
+    ):
+        # variables
+        self.date = date
         self.clock_in = clock_in
         self.clock_out = clock_out
         self.lunch_in = lunch_in
@@ -15,22 +29,25 @@ class WorkShift:
     def view(self):
         """
         EXAMPLE: 
-        IN:     Wed Jul 23      8:00 AM
-        OUT:    Wed Jul 23      4:00 PM
-        Skipped lunch this shift.
-        Shift length:   8.00
-        Payrate:        staples copy center
-        Payrate:        $18.50 per hour
-        Pre-tax:        $148.00
+        DATE: 		Tue Jun 17
+        IN: 		1:55 PM
+        OUT: 		8:33 PM
+        Lunch start: 	6:21 PM
+        Lunch end: 	6:54 PM
+        Shift length: 	6.08
+        Payrate: 	staples copy center
+        Payrate: 	$18.50 per hour
+        Pre-tax: 	$112.54
         """
         print()
-        print(f"IN: \t{self.clock_in.strftime("%a %b %d\t%-I:%M %p")}")
-        print(f"OUT: \t{self.clock_out.strftime("%a %b %d\t%-I:%M %p")}")
-        if self.lunch_in == datetime(1, 1, 1, 1): 
+        print(f"DATE: \t\t{self.date.strftime("%a %b %d")}")
+        print(f"IN: \t\t{self.clock_in.strftime("%-I:%M %p")}")
+        print(f"OUT: \t\t{self.clock_out.strftime("%-I:%M %p")}")
+        if self.lunch_in == time(1): 
             print("Skipped lunch this shift.")
         else: 
-            print(f"Lunch start: \t{self.lunch_in.strftime("%a %b %d\t%-I:%M %p")}")
-            print(f"Lunch end: \t{self.lunch_out.strftime("%a %b %d\t%-I:%M %p")}")
+            print(f"Lunch start: \t{self.lunch_in.strftime("%-I:%M %p")}")
+            print(f"Lunch end: \t{self.lunch_out.strftime("%-I:%M %p")}")
 
         print(f"Shift length: \t{self.hours_worked():.2f}")
         print(f"Payrate: \t{self.rate_type}")
@@ -45,7 +62,10 @@ class WorkShift:
 
 
     def hours_worked(self) -> float:
-        net = (self.clock_out - self.clock_in) - (self.lunch_out - self.lunch_in)
+        shiftLength = datetime.combine(self.date, self.clock_out) - datetime.combine(self.date, self.clock_in)
+        lunch = datetime.combine(self.date, self.lunch_out) - datetime.combine(self.date, self.lunch_in)
+        # net = (self.clock_out - self.clock_in) - (self.lunch_out - self.lunch_in)
+        net = shiftLength - lunch
         return net.total_seconds() / 3600
 
 
@@ -56,17 +76,20 @@ class WorkShift:
     @staticmethod
     def from_row(row):
         """
-        Helps with loading shifts from a SQL database"""
+        Helps with loading shifts from a SQL database
+        """
+        print(f"from_row got: {row}")
         return WorkShift(
-            clock_in=datetime.fromisoformat(row[0]),
-            clock_out=datetime.fromisoformat(row[1]),
-            lunch_in=datetime.fromisoformat(row[2]) if row[2] else datetime(1, 1, 1, 1),
-            lunch_out=datetime.fromisoformat(row[3]) if row[3] else datetime(1, 1, 1, 1),
-            rate_type=row[4],
-            notes=row[5]
+            date=date.fromisoformat(row[0]),
+            clock_in=time.fromisoformat(row[1]),
+            clock_out=time.fromisoformat(row[2]),
+            lunch_in=time.fromisoformat(row[3]) if row[3] else time(1),
+            lunch_out=time.fromisoformat(row[4]) if row[4] else time(1),
+            rate_type=row[5],
+            notes=row[6]
         )
 
 
     def __repr__(self):
-        return (f"<WorkShift {self.clock_in.strftime('%Y-%m-%d %H:%M')} - {self.clock_out.strftime('%H:%M')}, "
+        return (f"<WorkShift {self.clock_in.strftime('%-I:%M %p')} - {self.clock_out.strftime('%-I:%M %p')}, "
                 f"{self.hours_worked():.2f} hrs, ${self.before_tax_earnings():.2f}, Note: {self.notes}>")
