@@ -71,16 +71,21 @@ def main():
 
     # get shifts from sheets
     df = sheetManager.get_dataframe_of_sheet()
-    
-    newShift = parsePunchesIntoOneShift()    
-    sheetManager.add_new_shift_to_sheet(newShift)
+
+    shifts = []
+    if PUNCH_TIMES:    
+        newShift = parsePunchesIntoOneShift()    
+        sheetManager.add_new_shift_to_sheet(newShift)
+        shifts = [newShift]
+    else: 
+        print(f"\nNo new shifts to parse")
     
     
     # Save to SQL DB 
-    shifts = collectShiftsFromDataFrame(df)
-    saveShiftsToDB([newShift] + shifts)
+    shifts += collectShiftsFromDataFrame(df)
+    saveShiftsToDB(shifts)
 
-    plot([newShift] + shifts)
+    plot(shifts)
     
     
 

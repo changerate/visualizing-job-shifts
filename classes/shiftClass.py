@@ -16,15 +16,46 @@ class WorkShift:
         notes: str = "", 
     ):
         # variables
-        self.date = date
-        self.clock_in = clock_in
-        self.clock_out = clock_out
-        self.lunch_in = lunch_in
-        self.lunch_out = lunch_out
-        self.rate_type = rate_type
-        self.notes = notes
+        self._date = date
+        self._clock_in = clock_in
+        self._clock_out = clock_out
+        self._lunch_in = lunch_in
+        self._lunch_out = lunch_out
+        self._rate_type = rate_type
+        self._notes = notes
 
 
+
+    @property
+    def date(self):
+        return self._date
+
+    @property
+    def clock_in(self):
+        return self._clock_in
+
+    @property
+    def clock_out(self):
+        return self._clock_out
+
+    @property
+    def lunch_in(self):
+        return self._lunch_in
+
+    @property
+    def lunch_out(self):
+        return self._lunch_out
+
+    @property
+    def rate_type(self):
+        return self._rate_type
+
+    @property
+    def notes(self):
+        return self._notes
+
+
+    
     @property
     def view(self):
         """

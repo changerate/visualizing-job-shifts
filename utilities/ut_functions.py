@@ -81,7 +81,10 @@ def saveShiftsToDB(shifts: list[WorkShift], dbPath: Path=SCRIPTS_DIR / SHIFTS_SQ
             )
         )
         
-        print(f"✔︎")
+        if cur.rowcount == 1:
+            print(f"✔︎")
+        else:
+            print("✖︎ (likely duplicate).")
 
 
     conn.commit()
