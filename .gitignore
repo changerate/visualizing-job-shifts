@@ -3,7 +3,7 @@
 
 
 # Ignore the DB 
-database.db
+/database.db
 
 # Ignore all files in the dir
 api-keys/**
