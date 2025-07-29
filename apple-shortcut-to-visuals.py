@@ -46,7 +46,7 @@ CSV_NAME = args.csv
 CURRENT_YEAR = args.year
 PUNCH_TIMES = args.punchTimes
 PULL_SHEETS_FIRST = args.pullSheetsFirst
-SHIFTS_SQL_DB_NAME = 'databases/shifts.db'
+SHIFTS_SQL_DB_NAME = 'database.db'
 SHEET_NAME = args.sheetName
 
 
