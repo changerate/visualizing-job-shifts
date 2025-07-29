@@ -2,21 +2,21 @@
 .DS_Store
 
 
+# Ignore the DB 
+database.db
+
 # Ignore all files in the dir
 api-keys/**
 sheet-closet/original-sheets/**
 sheet-closet/working-sheets/**
-databases/**
 
 # But don't ignore the directory itself
 !api-keys/
 !sheet-closet/original-sheets/
 !sheet-closet/working-sheets/
-!databases/
 !api-keys/.keep
 !sheet-closet/original-sheets/.keep
 !sheet-closet/working-sheets/.keep
-!databases/.keep
 
 
 
