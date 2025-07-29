@@ -2,7 +2,7 @@ SHEET_NAME = "Copy of Staples Finances 2025"
 CURRENT_YEAR = '2025'
 
 from classes.googleSheetClass import GoogleSheetManager
-from classes.shiftClass import WorkShift
+from classes.workShiftClass import WorkShift
 from utilities.ut_functions import *
 from utilities.workshift_data import *
 

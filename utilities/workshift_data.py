@@ -1,5 +1,5 @@
 from datetime import date, time, datetime
-from classes.shiftClass import WorkShift
+from classes.workShiftClass import WorkShift
 
 
 GOOGLE_SHEET_COL_TYPES = {

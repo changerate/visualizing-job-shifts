@@ -14,7 +14,7 @@ from datetime import datetime, date, time
 
 # user modules
 from utilities.workshift_data import *
-from classes.shiftClass import WorkShift
+from classes.workShiftClass import WorkShift
 
 SCRIPTS_DIR = Path(__file__).parent.parent
 

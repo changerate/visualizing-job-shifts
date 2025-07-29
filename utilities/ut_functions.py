@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 
-from classes.shiftClass import WorkShift
+from classes.workShiftClass import WorkShift
 from utilities.necessary_data import NECESSARY_DATA
 from utilities.workshift_data import *
 from utilities.ut_functions import *
