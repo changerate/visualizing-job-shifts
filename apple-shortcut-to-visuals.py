@@ -1,4 +1,5 @@
-# Visualizing the shifts that I've worked at Staples
+# Visualizing the shifts that I've worked at retail jobs
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
