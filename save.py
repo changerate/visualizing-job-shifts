@@ -14,8 +14,8 @@ def main():
     sheetManager = GoogleSheetManager(sheet_name=SHEET_NAME)
     # sheetManager.add_new_shift_to_sheet(newShift)
     df = sheetManager.get_dataframe_of_sheet()
-    shifts = collectShiftsFromDataFrame(df)
-    printShifts(shifts)
+    shifts = collect_shifts_from_dataframeFromDataFrame(df)
+    print_shifts(shifts)
     
     
 
@@ -30,7 +30,7 @@ def main():
     # )
 
     
-    # # newShift = parsePunchesIntoOneShift()    
+    # # newShift = parse_punches_IntoOneShift()    
     
     
     
@@ -44,16 +44,16 @@ def main():
     
 
 
-def collectShiftsFromDataFrame(df):
+def collect_shifts_from_dataframeFromDataFrame(df):
 
-    df = cleanData(df)
+    df = clean_data(df)
     shifts = []
 
     print()
     print(f"Checking the validity of the rows: ")
     for _, row in df.iterrows():
         
-        if not isValidShiftRow(row, df.columns):
+        if not is_valid_shift_row(row, df.columns):
             continue
         
         # This data is essentially allowed to be blank
@@ -76,7 +76,7 @@ def collectShiftsFromDataFrame(df):
 
 
 
-def cleanEmptyColumns(df, threshold=0.30):     
+def clean_empty_cols(df, threshold=0.30):     
     """
     Remove columns that are over 'threshold' percent empty
     """
@@ -116,7 +116,7 @@ def cleanEmptyColumns(df, threshold=0.30):
     
 
 
-def cleanData(df, winterBreak=False):
+def clean_data(df, winterBreak=False):
     """
     Cleaning a dataframe for proper use.
 
@@ -127,7 +127,7 @@ def cleanData(df, winterBreak=False):
     - remove skip lunch column
     """
     
-    df = cleanEmptyColumns(df)
+    df = clean_empty_cols(df)
 
     ## Remove skip lunch column lol
     try: 

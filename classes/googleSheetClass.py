@@ -80,10 +80,15 @@ class GoogleSheetManager:
 
 
 
+
         
 
     def get_dataframe_of_sheet(self) -> pd.DataFrame:
-        # Create DataFrame using first row as header
+        """
+        Create DataFrame using first row as header
+        This works with the 'cached' sheet, NOT the live sheet online.
+        """
+        
         if not self.sheet:
             print(f"The sheet was not loaded in\n")
             return None
